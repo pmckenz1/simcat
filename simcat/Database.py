@@ -276,8 +276,8 @@ class Database:
         i5.create_dataset(name="node_Nes", shape=lnodes, dtype=np.int64)
         i5.create_dataset(name="slide_seeds", shape=(lnodes[0],), dtype=np.int)
 
-        # array of admixture triplets (source, dest, prop) time is always p0.5
-        ashape = (self.nstored_labels, 3 * self.nedges)
+        # array of admixture triplets (source, dest, time, prop)
+        ashape = (self.nstored_labels, 4 * self.nedges)
         i5.create_dataset(name="admixture", shape=ashape, dtype=np.float64)
 
         # close the files
@@ -294,21 +294,29 @@ class Database:
         if not self._random_sampling:
             migsamps = np.linspace(
                 self.admix_prop_min, self.admix_prop_max, self.naprops)
-            popsizes = np.linspace(
+            temp_popsizes = np.linspace(
                 self.Ne_min, self.Ne_max, self.nnes)
+            popsizes = np.repeat(temp_popsizes, self.inodes).reshape(self.nnes, self.inodes)
 
-        # otherwise, we probably to grid random admix props and random Nes
+        # otherwise, we probably want to grid random admix props and random Nes
         else:
             migsamps = np.random.uniform(
                 self.admix_prop_min, self.admix_prop_max, self.naprops)
-            popsizes = np.random.uniform(
-                self.Ne_min, self.Ne_max, self.nnes)
+            if self.Ne_fixed:
+                # this generates a single random Ne value for each sampled Ne
+                temp_popsizes = np.random.uniform(
+                    self.Ne_min, self.Ne_max, self.nnes)
+                popsizes = np.repeat(temp_popsizes, self.inodes).reshape(self.nnes, self.inodes)
+            else:
+                # this generates node-specific random Ne values for each sampled Ne
+                popsizes = np.random.uniform(
+                    self.Ne_min, self.Ne_max, (self.nnes, self.inodes))
 
         # arrays to write in chunks to the h5 array
         chunksize = 10000
         arr_h = np.zeros((chunksize, self.inodes), dtype=np.int)
         arr_n = np.zeros((chunksize, self.inodes), dtype=np.int)
-        arr_a = np.zeros((chunksize, 3), dtype=np.float)
+        arr_a = np.zeros((chunksize, 4), dtype=np.float)
         arr_s = np.zeros((chunksize,), dtype=np.int)
 
         # test is a sampled nodeslide (heights, edges), migrate, migprop, Nes
@@ -318,8 +326,9 @@ class Database:
 
             # wiggle node heights
             if self.node_slider:
+                prop = 0.25
                 slide_seed = self.random.randint(0, 1e12)
-                ntree = self.tree.mod.node_slider(prop=0.25, seed=slide_seed)
+                ntree = self.tree.mod.node_slider(prop=prop, seed=slide_seed)
             else:
                 ntree = self.tree
 
@@ -330,7 +339,7 @@ class Database:
             # ipops = popsizes[mask]
 
             # get n admixture edges (on this slide tree)
-            aedges = get_all_admix_edges(ntree, 0.5, 0.5, self.exclude_sisters)
+            aedges = get_all_admix_edges(ntree, self.admix_edge_min, self.admix_prop_max, self.exclude_sisters)
 
             # if node sliding changed naedges sub or super select random aedges 
             if len(aedges) != self.naedges:
@@ -354,7 +363,12 @@ class Database:
                     for rep in range(self.nreps):
                         arr_h[idx] = iheights
                         arr_n[idx] = ne
-                        arr_a[idx] = (edgetup[0], edgetup[1], aprop)
+                        arr_a[idx] = (edgetup[0],
+                                      edgetup[1],
+                                      # here is where the timing is selected
+                                      np.random.uniform(self.admix_edge_min,
+                                                        self.admix_prop_max),
+                                      aprop)
                         if self.node_slider:
                             arr_s[idx] = slide_seed
 

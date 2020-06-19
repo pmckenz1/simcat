@@ -83,8 +83,8 @@ class IPCoalWrapper:
             admix = (
                 int(self.admixture[idx, 0]),
                 int(self.admixture[idx, 1]),
-                0.5,
                 self.admixture[idx, 2],
+                self.admixture[idx, 3],
             )
 
             # build ipcoal Model object
