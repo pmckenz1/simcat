@@ -315,7 +315,7 @@ class Database:
         # arrays to write in chunks to the h5 array
         chunksize = 10000
         arr_h = np.zeros((chunksize, self.inodes), dtype=np.int)
-        arr_n = np.zeros((chunksize, self.nnodes), dtype=np.int)
+        arr_n = np.zeros((chunksize, self.tree.nnodes), dtype=np.int)
         arr_a = np.zeros((chunksize, 4), dtype=np.float)
         arr_s = np.zeros((chunksize,), dtype=np.int)
 
