@@ -272,8 +272,9 @@ class Database:
 
         # array of node heights,Nes in traverse order (-tips)
         lnodes = (self.nstored_labels, self.inodes)
+        allnodes = (self.nstored_labels, self.tree.nnodes)
         i5.create_dataset(name="node_heights", shape=lnodes, dtype=np.int64)
-        i5.create_dataset(name="node_Nes", shape=lnodes, dtype=np.int64)
+        i5.create_dataset(name="node_Nes", shape=allnodes, dtype=np.int64)
         i5.create_dataset(name="slide_seeds", shape=(lnodes[0],), dtype=np.int)
 
         # array of admixture triplets (source, dest, time, prop)
