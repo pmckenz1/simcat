@@ -296,7 +296,7 @@ class Database:
                 self.admix_prop_min, self.admix_prop_max, self.naprops)
             temp_popsizes = np.linspace(
                 self.Ne_min, self.Ne_max, self.nnes)
-            popsizes = np.repeat(temp_popsizes, self.inodes).reshape(self.nnes, self.inodes)
+            popsizes = np.repeat(temp_popsizes, self.tree.nnodes).reshape(self.nnes, self.tree.nnodes)
 
         # otherwise, we probably want to grid random admix props and random Nes
         else:
@@ -306,16 +306,16 @@ class Database:
                 # this generates a single random Ne value for each sampled Ne
                 temp_popsizes = np.random.uniform(
                     self.Ne_min, self.Ne_max, self.nnes)
-                popsizes = np.repeat(temp_popsizes, self.inodes).reshape(self.nnes, self.inodes)
+                popsizes = np.repeat(temp_popsizes, self.tree.nnodes).reshape(self.nnes, self.tree.nnodes)
             else:
                 # this generates node-specific random Ne values for each sampled Ne
                 popsizes = np.random.uniform(
-                    self.Ne_min, self.Ne_max, (self.nnes, self.inodes))
+                    self.Ne_min, self.Ne_max, (self.nnes, self.tree.nnodes))
 
         # arrays to write in chunks to the h5 array
         chunksize = 10000
         arr_h = np.zeros((chunksize, self.inodes), dtype=np.int)
-        arr_n = np.zeros((chunksize, self.inodes), dtype=np.int)
+        arr_n = np.zeros((chunksize, self.nnodes), dtype=np.int)
         arr_a = np.zeros((chunksize, 4), dtype=np.float)
         arr_s = np.zeros((chunksize,), dtype=np.int)
 

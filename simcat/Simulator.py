@@ -76,8 +76,8 @@ class IPCoalWrapper:
             tree = tree.set_node_values("Ne", default=1e5)
             nes = iter(self.node_Nes[idx])
             for node in tree.treenode.traverse():
-                if not node.is_leaf():
-                    node.Ne = next(nes)
+                #if not node.is_leaf():
+                node.Ne = next(nes)
 
             # get admixture tuples (only supports 1 edge like this right now)
             admix = (
