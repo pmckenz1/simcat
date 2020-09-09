@@ -101,7 +101,7 @@ class BatchTrain:
         pd.DataFrame([unique_labs_ints, unique_labs]).to_csv(self.onehot_dict_path,
                                                              index=False)
         print('')
-        print('onehot dictionary file saved to ' + self.onehot_dict_path)
+        print('Onehot dictionary file saved to ' + self.onehot_dict_path)
 
         inv_onehot_dict = dict(zip(unique_labs,range(len(unique_labs))))
 
