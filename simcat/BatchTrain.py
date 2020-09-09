@@ -97,8 +97,11 @@ class BatchTrain:
         self.input_shape = np.prod(countsfile['counts'].shape[1:])
         an_file.attrs['input_shape'] = self.input_shape
 
-        pd.DataFrame([unique_labs_ints, unique_labs]).to_csv(os.path.join(self.directory,self.output_name+'.onehot_dict.h5'),
-                                                                          index=False)
+        self.onehot_dict_path = os.path.join(self.directory,self.output_name+'.onehot_dict.csv')
+        pd.DataFrame([unique_labs_ints, unique_labs]).to_csv(self.onehot_dict_path,
+                                                             index=False)
+        print('')
+        print('onehot dictionary file saved to ' + self.onehot_dict_path)
 
         inv_onehot_dict = dict(zip(unique_labs,range(len(unique_labs))))
 
@@ -110,7 +113,7 @@ class BatchTrain:
         countsfile.close()
         labsfile.close()
 
-        print('\n')
+        print('')
         print('Analysis reference file saved to ' + self.analysis_filepath)
 
     def write_onehot_file(self):
@@ -124,7 +127,7 @@ class BatchTrain:
         self.model = model
         self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
         model.save(self.model_path)
-        print("New neural network saved to: " + self.model_path)
+        print("New neural network saved to " + self.model_path)
 
     def load_model(self):
         self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
