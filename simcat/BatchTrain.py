@@ -130,7 +130,7 @@ class BatchTrain:
         self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
         self.model = load_model(self.model_path)
 
-    def train_epoch(self,
+    def train(self,
                     batch_size,
                     num_epochs):
         countsfile = h5py.File(self.counts_filepath, 'r')
