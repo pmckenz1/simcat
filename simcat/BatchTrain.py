@@ -13,8 +13,6 @@ import pandas as pd
 from keras.utils import to_categorical
 from keras.models import load_model
 from keras.utils import Sequence
-from keras.models import Sequential, load_model
-from keras.layers import Dense
 
 
 class BatchTrain:
@@ -126,6 +124,7 @@ class BatchTrain:
         self.model = model
         self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
         model.save(self.model_path)
+        print("New neural network saved to: " + self.model_path)
 
     def load_model(self):
         self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
