@@ -16,6 +16,7 @@ from keras.utils import Sequence
 from keras.models import Sequential, load_model
 from keras.layers import Dense
 
+
 class BatchTrain:
     def __init__(self,
              input_name,
@@ -28,19 +29,19 @@ class BatchTrain:
              directionality=True,
              write_onehot_file=False,
             ):
-        self.input_name=input_name
-        self.output_name=output_name
-        self.directory=directory
-        self.prop_training=prop_training
-        self.exclude_sisters=exclude_sisters
-        self.exclude_magnitude=exclude_magnitude
-        self.to_zero_magnitude=to_zero_magnitude
-        self.directionality=directionality
-        self.write_onehot_file=write_onehot_file
-        self.model=None
+        self.input_name = input_name
+        self.output_name = output_name
+        self.directory = directory
+        self.prop_training = prop_training
+        self.exclude_sisters = exclude_sisters
+        self.exclude_magnitude = exclude_magnitude
+        self.to_zero_magnitude = to_zero_magnitude
+        self.directionality = directionality
+        self.write_onehot_file = write_onehot_file
+        self.model = None
 
-        self.counts_filepath = os.path.join(directory,input_name+'.counts.h5')
-        self.labs_filepath = os.path.join(directory,input_name+'.labels.h5')
+        self.counts_filepath = os.path.join(directory, input_name+'.counts.h5')
+        self.labs_filepath = os.path.join(directory, input_name+'.labels.h5')
 
         self.write_ref_files()
 
@@ -115,10 +116,10 @@ class BatchTrain:
         print('Analysis reference file saved to ' + self.analysis_filepath)
 
     def write_onehot_file(self):
-    	'''
-    	To write a file that contains the one-hot-encoded labels. Optional
-    	because this might take lots of space.
-    	'''
+        '''
+        To write a file that contains the one-hot-encoded labels. Optional
+        because this might take lots of space.
+        '''
         pass
 
     def init_model(self,model):
@@ -130,9 +131,11 @@ class BatchTrain:
         self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
         self.model = load_model(self.model_path)
 
-    def train_epoch(self,batch_size):
-        countsfile = h5py.File(self.counts_filepath,'r')
-        an_file = h5py.File(self.analysis_filepath,'r')
+    def train_epoch(self,
+                    batch_size,
+                    num_epochs):
+        countsfile = h5py.File(self.counts_filepath, 'r')
+        an_file = h5py.File(self.analysis_filepath, 'r')
 
         training_batch_generator = My_Custom_Generator(np.array(an_file['training']),
                                                        batch_size,
@@ -145,13 +148,13 @@ class BatchTrain:
                                                          countsfile)
 
         self.model.fit_generator(generator=training_batch_generator,
-                   steps_per_epoch = int(an_file['training'].shape[0] // batch_size),
-                   epochs = 1,
-                   verbose = 1,
-                   validation_data = validation_batch_generator,
-                   validation_steps = int(an_file['testing'].shape[0] // batch_size))
+                                 steps_per_epoch=int(an_file['training'].shape[0] // batch_size),
+                                 epochs=num_epochs,
+                                 verbose=1,
+                                 validation_data=validation_batch_generator,
+                                 validation_steps=int(an_file['testing'].shape[0] // batch_size))
 
-        model.save(self.model_path)
+        self.model.save(self.model_path)
 
         countsfile.close()
         an_file.close()
@@ -165,15 +168,15 @@ class My_Custom_Generator(Sequence):
         self.analysis_file = analysis_file
         self.counts_file = counts_file
 
-    def __len__(self) :
+    def __len__(self):
         return (np.ceil(len(self.database_idxs) / float(self.batch_size))).astype(np.int)
 
-    def __getitem__(self, idx) :
+    def __getitem__(self, idx):
         batch_idxs = self.database_idxs[idx * self.batch_size : (idx+1) * self.batch_size]
 
         filler = np.zeros((len(batch_idxs)),dtype=np.int)
         counter = 0
-        for i_ in idxs:
+        for i_ in batch_idxs:
             filler[counter] = np.argmax(self.analysis_file['labels'][:,0] == i_)
             counter = counter + 1
 
