@@ -17,31 +17,37 @@ from keras.utils import Sequence
 
 class BatchTrain:
     def __init__(self,
-             input_name,
-             output_name,
-             directory,
-             prop_training=0.9,
-             exclude_sisters=True,
-             exclude_magnitude=0.1,
-             to_zero_magnitude=None,
-             directionality=True,
-             write_onehot_file=False,
-            ):
+                 input_name,
+                 output_name,
+                 directory,
+                 exists=False,
+                 prop_training=0.9,
+                 exclude_sisters=True,
+                 exclude_magnitude=0.1,
+                 to_zero_magnitude=None,
+                 directionality=True,
+                 ):
         self.input_name = input_name
         self.output_name = output_name
         self.directory = directory
+        self.exists = exists
+
         self.prop_training = prop_training
         self.exclude_sisters = exclude_sisters
         self.exclude_magnitude = exclude_magnitude
         self.to_zero_magnitude = to_zero_magnitude
         self.directionality = directionality
-        self.write_onehot_file = write_onehot_file
+
         self.model = None
 
         self.counts_filepath = os.path.join(directory, input_name+'.counts.h5')
         self.labs_filepath = os.path.join(directory, input_name+'.labels.h5')
 
-        self.write_ref_files()
+        if not self.exists:
+            self.write_ref_files()
+        else:
+            self.load()
+
 
     def write_ref_files(self):
 
@@ -109,12 +115,38 @@ class BatchTrain:
 
         an_file.create_dataset('labels',shape=(len(y_ints),2), data=np.array([all_viable_idxs,y_ints]).T)
 
+        # add the other attributes from __init__
+        an_file.attrs['prop_training'] = self.prop_training
+        an_file.attrs['exclude_sisters'] = self.exclude_sisters
+        an_file.attrs['exclude_magnitude'] = self.exclude_magnitude
+        an_file.attrs['to_zero_magnitude'] = self.to_zero_magnitude
+        an_file.attrs['directionality'] = self.directionality
+        an_file.attrs['num_training'] = self.num_training
+        an_file.attrs['num_testing'] = self.num_testing
+
         an_file.close()
         countsfile.close()
         labsfile.close()
 
         print('')
         print('Analysis reference file saved to ' + self.analysis_filepath)
+
+    def load(self):
+        self.analysis_filepath = os.path.join(self.directory,self.output_name+'.analysis.h5')
+        self.onehot_dict_path = os.path.join(self.directory,self.output_name+'.onehot_dict.csv')
+
+        # load in attributes
+        an_file = h5py.File(self.analysis_filepath,'r')
+        self.num_classes = an_file.attrs['num_classes']
+        self.input_shape = an_file.attrs['input_shape']
+        self.prop_training = an_file.attrs['prop_training']
+        self.exclude_sisters = an_file.attrs['exclude_sisters']
+        self.exclude_magnitude = an_file.attrs['exclude_magnitude']
+        self.to_zero_magnitude = an_file.attrs['to_zero_magnitude']
+        self.directionality = an_file.attrs['directionality']
+        self.num_training = an_file.attrs['num_training']
+        self.num_testing = an_file.attrs['num_testing']
+
 
     def write_onehot_file(self):
         '''
@@ -134,8 +166,8 @@ class BatchTrain:
         self.model = load_model(self.model_path)
 
     def train(self,
-                    batch_size,
-                    num_epochs):
+              batch_size,
+              num_epochs):
         countsfile = h5py.File(self.counts_filepath, 'r')
         an_file = h5py.File(self.analysis_filepath, 'r')
 
