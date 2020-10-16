@@ -24,7 +24,7 @@ class BatchTrain:
                  prop_training=0.9,
                  exclude_sisters=True,
                  exclude_magnitude=0.1,
-                 to_zero_magnitude=None,
+                 to_zero_magnitude=0,
                  directionality=True,
                  ):
         self.input_name = input_name
@@ -167,32 +167,115 @@ class BatchTrain:
 
     def train(self,
               batch_size,
-              num_epochs):
+              num_epochs,
+              workers=4):
         countsfile = h5py.File(self.counts_filepath, 'r')
         an_file = h5py.File(self.analysis_filepath, 'r')
 
-        training_batch_generator = My_Custom_Generator(np.array(an_file['training']),
-                                                       batch_size,
-                                                       an_file,
-                                                       countsfile)
+        n_classes = an_file.attrs['num_classes']
 
-        validation_batch_generator = My_Custom_Generator(np.array(an_file['testing']),
-                                                         batch_size,
-                                                         an_file,
-                                                         countsfile)
+        labels = dict(zip(an_file['labels'][:, 0], an_file['labels'][:, 1]))
+        #training_batch_generator = My_Custom_Generator(np.array(an_file['training']),
+        #                                               batch_size,
+        #                                               an_file,
+        #                                               countsfile)
 
+        training_batch_generator = DataGenerator(np.array(an_file['training']),
+                                                 labels,
+                                                 countsfile,
+                                                 n_classes,
+                                                 batch_size
+                                                 )
+
+        validation_batch_generator = DataGenerator(np.array(an_file['testing']),
+                                                   labels,
+                                                   countsfile,
+                                                   n_classes,
+                                                   batch_size
+                                                   )
+
+        #validation_batch_generator = My_Custom_Generator(np.array(an_file['testing']),
+        #                                                 batch_size,
+        #                                                 an_file,
+        #                                                 countsfile)
+
+        # Train model on dataset
         self.model.fit_generator(generator=training_batch_generator,
-                                 steps_per_epoch=int(an_file['training'].shape[0] // batch_size),
-                                 epochs=num_epochs,
-                                 verbose=1,
                                  validation_data=validation_batch_generator,
-                                 validation_steps=int(an_file['testing'].shape[0] // batch_size))
+                                 use_multiprocessing=True,
+                                 workers=6,
+                                 verbose=1,
+                                 epochs=num_epochs)
+
+        #self.model.fit_generator(generator=training_batch_generator,
+        #                         steps_per_epoch=int(an_file['training'].shape[0] // batch_size),
+        #                         epochs=num_epochs,
+        #                         verbose=1,
+        #                         validation_data=validation_batch_generator,
+        #                         validation_steps=int(an_file['testing'].shape[0] // batch_size))
 
         self.model.save(self.model_path)
 
         countsfile.close()
         an_file.close()
 
+
+class DataGenerator(Sequence):
+    'Generates data for Keras'
+    def __init__(self,
+                 list_IDs,
+                 labels,
+                 data_file,
+                 n_classes,
+                 batch_size=32,
+                 shuffle=True):
+        'Initialization'
+        self.batch_size = batch_size
+        self.labels = labels
+        self.data_file = data_file
+        self.list_IDs = list_IDs
+        self.n_classes = n_classes
+        self.shuffle = shuffle
+        self.on_epoch_end()
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.floor(len(self.list_IDs) / self.batch_size))
+
+    def __getitem__(self, index):
+        'Generate one batch of data'
+        # Generate indexes of the batch
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+        # Find list of IDs
+        list_IDs_temp = [self.list_IDs[k] for k in indexes]
+
+        # Generate data
+        X, y = self.__data_generation(list_IDs_temp)
+
+        return X, y
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        self.indexes = np.arange(len(self.list_IDs))
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, list_IDs_temp):
+        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
+        # Initialization
+        y = np.empty((self.batch_size), dtype=int)
+        
+        X = np.array([self.data_file['counts'][_] for _ in list_IDs_temp])
+        X = X.reshape(X.shape[0], -1)
+        X = X / X.max()
+        
+        # Generate data
+        for i, ID in enumerate(list_IDs_temp):
+            # Store class
+            y[i] = self.labels[ID]
+
+        return X, keras.utils.to_categorical(y, num_classes=self.n_classes)
 
 class My_Custom_Generator(Sequence):
 
