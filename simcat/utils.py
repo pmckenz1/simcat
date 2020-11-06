@@ -317,6 +317,13 @@ def calculate_hils_f12(mat, gamma=0.):
 
 
 
+def get_sister_idxs(tre):
+    sisters = []
+    for node in tre.treenode.traverse():
+        if len(node.children) == 2:
+            sisters.append(list(np.sort([i.idx for i in node.children])))
+    return(sisters)
+
 
 # def progress_bar(njobs, nfinished, start, message=""):
 #     "prints a progress bar"

@@ -261,11 +261,14 @@ class Database:
         o5.attrs["nsnps"] = self.nsnps
         i5.attrs["nquarts"] = self.nquarts
         o5.attrs["nquarts"] = self.nquarts
+        i5.attrs["ntips"] = self.tree.ntips
+        o5.attrs["ntips"] = self.tree.ntips
 
         # store data in separate dsets and with matrix shape so that in the 
         # analysis we can best take advantage of different combinations of the
         # data and its structure.
-        smat = (self.nstored_labels, self.nquarts, 16, 16)
+        smat = (self.nstored_labels, self.tree.ntips, self.nsnps)
+        #smat = (self.nstored_labels, self.nquarts, 16, 16)
 
         # countsize = (self.nstored_labels, snps + svdu + svdv + svds + mvar)
         o5.create_dataset(name="counts", shape=smat, dtype=np.int64, compression="gzip")

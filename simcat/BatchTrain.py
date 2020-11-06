@@ -10,6 +10,7 @@ import os
 import toytree
 import pandas as pd
 
+from simcat.utils import get_snps_count_matrix
 from keras.utils import to_categorical
 from keras.models import load_model
 from keras.utils import Sequence
@@ -39,6 +40,7 @@ class BatchTrain:
         self.directionality = directionality
 
         self.model = None
+        self.newick = None
 
         self.counts_filepath = os.path.join(directory, input_name+'.counts.h5')
         self.labs_filepath = os.path.join(directory, input_name+'.labels.h5')
@@ -57,6 +59,9 @@ class BatchTrain:
         labsfile = h5py.File(self.labs_filepath,'r')
 
         sister_idxs = get_sister_idxs(toytree.tree(countsfile.attrs['tree']))
+        self.newick = countsfile.attrs['tree']
+        self.nquarts = countsfile.attrs['nquarts']
+
 
         num_full_dat = countsfile['counts'].shape[0]
 
@@ -123,6 +128,8 @@ class BatchTrain:
         an_file.attrs['directionality'] = self.directionality
         an_file.attrs['num_training'] = self.num_training
         an_file.attrs['num_testing'] = self.num_testing
+        an_file.attrs['newick'] = self.newick
+        an_file.attrs['nquarts'] = self.nquarts
 
         an_file.close()
         countsfile.close()
@@ -146,6 +153,8 @@ class BatchTrain:
         self.directionality = an_file.attrs['directionality']
         self.num_training = an_file.attrs['num_training']
         self.num_testing = an_file.attrs['num_testing']
+        self.newick = an_file.attrs['newick']
+        self.nquarts = an_file.attrs['nquarts']
 
 
     def write_onehot_file(self):
@@ -233,6 +242,8 @@ class DataGenerator(Sequence):
         self.batch_size = batch_size
         self.labels = labels
         self.data_file = data_file
+        self.tree = toytree.tree(data_file.attrs['tree'])
+        self.nquarts = data_file.attrs['nquarts']
         self.list_IDs = list_IDs
         self.n_classes = n_classes
         self.shuffle = shuffle
@@ -266,7 +277,10 @@ class DataGenerator(Sequence):
         # Initialization
         y = np.empty((self.batch_size), dtype=int)
         
-        X = np.array([self.data_file['counts'][_] for _ in list_IDs_temp])
+        X_ = np.array([self.data_file['counts'][_] for _ in list_IDs_temp])
+        X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
+        for row in range(X.shape[0]):
+            X = np.array([get_snps_count_matrix(self.tree, X_[row])])
         X = X.reshape(X.shape[0], -1)
         X = X / X.max()
         

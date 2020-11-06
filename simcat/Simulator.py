@@ -98,10 +98,10 @@ class IPCoalWrapper:
             model.sim_snps(self.nsnps)
 
             # stack to mat
-            mat = get_snps_count_matrix(tree, model.seqs)
+            #mat = get_snps_count_matrix(tree, model.seqs)
 
             # store results
-            self.counts[idx] = mat
+            self.counts[idx] = model.seqs
 
 
 def split_snps_to_chunks(nsnps, nchunks):
