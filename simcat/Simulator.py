@@ -12,9 +12,9 @@ import h5py
 import ipcoal
 import os
 import toytree
+import time
 import numpy as np
-from .utils import get_snps_count_matrix
-from .utils import get_all_admix_edges, SimcatError, Progress
+from .utils import SimcatError, Progress
 from .parallel import Parallel
 
 
