@@ -86,11 +86,13 @@ class Simulator:
 
         # submit jobs to engines
         rasyncs = {}
+        testcounter = 0 # REMOVE
         for slice0 in jobs:
             slice1 = min(nsims, slice0 + self.chunksize)
             if slice1 > slice0:
-                args = (self.labels, sim_idxs[slice0:slice1], True)
+                args = (self.labels, sim_idxs[slice0:slice1], True, testcounter)
                 rasyncs[slice0] = lbview.apply(IPCoalWrapper, *args)
+                testcounter += 1
 
         # catch results as they return and enter into H5 to keep mem low.
         progress = Progress(njobs, "Simulating count matrices", children)
@@ -162,7 +164,7 @@ class IPCoalWrapper:
     building the msprime simulations calls, and then calling .run() to fill
     count matrices and return them.
     """
-    def __init__(self, database_file, idxs, run=True):
+    def __init__(self, database_file, idxs, run=True, testcounter):
 
         # location of data
         self.database = database_file
@@ -173,7 +175,7 @@ class IPCoalWrapper:
 
         # fill the vector of simulated data for .counts
         if run:
-            self.run()
+            self.run(testcounter)
 
 
     def load_slice(self):
@@ -200,7 +202,7 @@ class IPCoalWrapper:
                 (self.nvalues, self.tree.ntips, self.nsnps), dtype=np.int64)
 
 
-    def run(self):
+    def run(self, testcounter):
         """
         iterate through ipcoal simulations across label values.
         """
@@ -246,6 +248,7 @@ class IPCoalWrapper:
 
             # store results
             self.counts[idx] = model.seqs
+            self.counts[idx][0,0] = testcounter
 
 
 def split_snps_to_chunks(nsnps, nchunks):
