@@ -166,6 +166,7 @@ class IPCoalWrapper:
             # sliced data arrays
             self.node_Nes = io5["node_Nes"][self.idxs, ...]
             self.admixture = io5["admixture"][self.idxs, ...]
+            self.treeheight = io5["treeheight"][self.idxs, ...]
             self.slide_seeds = io5["slide_seeds"][self.idxs]
 
             # attribute metadata

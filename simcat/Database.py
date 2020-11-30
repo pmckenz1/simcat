@@ -293,8 +293,9 @@ class Database:
                           data=np.zeros(shape=(lnodes[0],),
                                    dtype=np.int)
                           )
+        i5.create_dataset(names="treeheight", shape=(lnodes[0],), dtype=np.float64)
 
-        # array of admixture triplets (source, dest, time, prop)
+        # array of admixture quadruplets (source, dest, time, prop)
         ashape = (self.nstored_labels, self.nedges, 4)
         i5.create_dataset(name="admixture", shape=ashape, dtype=np.float64)
 
@@ -336,19 +337,24 @@ class Database:
         arr_n = np.zeros((chunksize, self.tree.nnodes), dtype=np.int)
         arr_a = np.zeros((chunksize, self.nedges, 4), dtype=np.float)
         arr_s = np.zeros((chunksize,), dtype=np.int)
+        arr_d = np.zeros((chunksize,), dtype=np.float64)
 
         # test is a sampled nodeslide (heights, edges), migrate, migprop, Nes
         wdx = 0
         idx = 0
         for aprop in migsamps:
+            newheight = np.random.uniform(self.heightmin, self.heightmax)
+
+            # make it taller! ...or shorter...
+            ntree = self.tree.mod.node_scale_root_height(treeheight=newheight)
 
             # wiggle node heights
             if self.node_slider:
                 prop = 0.25
                 slide_seed = self.random.randint(0, 1e12)
-                ntree = self.tree.mod.node_slider(prop=prop, seed=slide_seed)
+                ntree = ntree.mod.node_slider(prop=prop, seed=slide_seed)
             else:
-                ntree = self.tree
+                ntree = ntree
 
             # store internal heights and Nes to array
             heights = ntree.get_node_values("height", 1, 1).astype(int)
@@ -390,7 +396,7 @@ class Database:
                                                        aprop)
                         if self.node_slider:
                             arr_s[idx] = slide_seed
-
+                        arr_d[idx] = newheight
                         # advance counter
                         idx += 1
 
@@ -401,9 +407,12 @@ class Database:
                                 i5["node_Nes"][wdx:wdx + idx] = arr_n[:idx]
                                 i5["admixture"][wdx:wdx + idx] = arr_a[:idx]
                                 i5["slide_seeds"][wdx:wdx + idx] = arr_s[:idx]
+                                i5["treeheight"][wdx:wdx + idx] = arr_d[:idx]
                                 arr_h[:] = 0
                                 arr_n[:] = 0
                                 arr_a[:] = 0
+                                arr_s[:] = 0
+                                arr_d[:] = 0
                                 wdx += idx
                                 idx = 0
 
