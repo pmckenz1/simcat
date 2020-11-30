@@ -311,16 +311,12 @@ class Database:
         """
         # sample admixture props randomly or uniformly?
         if not self._random_sampling:
-            migsamps = np.linspace(
-                self.admix_prop_min, self.admix_prop_max, self.naprops)
             temp_popsizes = np.linspace(
                 self.Ne_min, self.Ne_max, self.nnes)
             popsizes = np.repeat(temp_popsizes, self.tree.nnodes).reshape(self.nnes, self.tree.nnodes)
 
         # otherwise, we probably want to grid random admix props and random Nes
         else:
-            migsamps = np.random.uniform(
-                self.admix_prop_min, self.admix_prop_max, self.naprops)
             if self.Ne_fixed:
                 # this generates a single random Ne value for each sampled Ne
                 temp_popsizes = np.random.uniform(
@@ -342,7 +338,7 @@ class Database:
         # test is a sampled nodeslide (heights, edges), migrate, migprop, Nes
         wdx = 0
         idx = 0
-        for aprop in migsamps:
+        for na in range(self.naprops):
             newheight = np.random.uniform(self.heightmin, self.heightmax)
 
             # make it taller! ...or shorter...
@@ -387,13 +383,15 @@ class Database:
                             arr_a[idx, aidx] = (exedge[0],exedge[1],# here is where the timing is selected
                                                 np.random.uniform(self.admix_edge_min,
                                                                   self.admix_edge_max),
-                                                aprop)
+                                                np.random.uniform(self.admix_prop_min,
+                                                                  self.admix_prop_max))
                         arr_a[idx, (self.nedges-1)] = (edgetup[0],
                                                        edgetup[1],
                                                        # here is where the timing is selected
                                                        np.random.uniform(self.admix_edge_min,
                                                                          self.admix_edge_max),
-                                                       aprop)
+                                                       np.random.uniform(self.admix_prop_min,
+                                                                         self.admix_prop_max))
                         if self.node_slider:
                             arr_s[idx] = slide_seed
                         arr_d[idx] = newheight
