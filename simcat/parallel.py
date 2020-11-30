@@ -31,7 +31,7 @@ class Parallel(object):
     Connect or launch ipcluster and wrap jobs running on Client engines so 
     that engines can be interrupted or killed with a pleasant cleanup.
     """
-    def __init__(self, tool, number, rkwargs=None, ipyclient=None, show_cluster=True, quiet=False, auto=False):
+    def __init__(self, tool, rkwargs=None, ipyclient=None, show_cluster=True, quiet=False, auto=False):
 
         # if no kwargs then empty dict
         if rkwargs is None:
