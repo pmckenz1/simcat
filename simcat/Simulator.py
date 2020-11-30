@@ -16,6 +16,7 @@ import time
 import numpy as np
 from .utils import SimcatError, Progress
 from .parallel import Parallel
+import fasteners
 
 
 class Simulator:
@@ -74,12 +75,17 @@ class Simulator:
         self.chunksize = max(4, self.chunksize)
         #self.chunksize = 4
 
+        # designate lock files
+        labslock = fasteners.InterProcessLock(self.labels+'.lock')
+        countslock = fasteners.InterProcessLock(self.counts+'.lock')
+
+        labslock.acquire()
         with h5py.File(self.labels,'r+') as i5:
             finished_sims = i5['finished_sims']
             avail = np.where(~np.array(finished_sims).astype(bool))[0]
             sim_idxs = avail[:nsims]
             finished_sims[sim_idxs] = 2  # code of 2 indicates that these have started
-
+        labslock.release()
         # an iterator to return chunked slices of jobs
         jobs = range(0, nsims, self.chunksize)
         njobs = int(np.ceil(nsims / self.chunksize))
@@ -115,11 +121,12 @@ class Simulator:
 
                         # object returns, pull out results
                         res = rasync.get()
+                        countslock.acquire()
                         with h5py.File(self.counts, mode='r+') as io5:
                             for rownum in range(res.counts.shape[0]):
                                 io5["counts"][sim_idxs[(job+rownum)], :] = res.counts[rownum]
                             #io5["counts"][job:job + self.chunksize, :] = res.counts
-
+                        countslock.release()
                         # free up memory from job
                         del rasyncs[job]
 
@@ -134,6 +141,11 @@ class Simulator:
                     break
                 else:
                     time.sleep(0.5)
+            labslock.acquire()
+            with h5py.File(self.labels,'r+') as i5:
+                finished_sims = i5['finished_sims']
+                finished_sims[sim_idxs] = 1
+            labslock.release()
 
             # on success: close the progress counter
             progress.widget.close()
@@ -146,6 +158,7 @@ class Simulator:
             # close the hdf5 handle
             io5.close()
 
+
     def run(self, nsims=None, force=True, ipyclient=None, show_cluster=False, auto=False):
         pool=Parallel(
             tool=self,
@@ -156,6 +169,41 @@ class Simulator:
             quiet=self._quiet
             )
         pool.wrap_run()
+
+
+#    def join_queue(self, filename, writedir='.'):
+#        with open(os.path.join(writedir, filename+'.queue'), 'a+') as f:
+#            f.write(str(os.getpid()))
+#            f.write('\n')
+
+
+#    def first_in_queue(self, filename, writedir='.'):
+#        with open(os.path.join(writedir, filename+'.queue'), 'r') as f:
+#            first = f.read().split()[0]
+#        if str(os.getpid) == first:
+#            return(True)
+#        else:
+#            return(False)
+
+#    def lock_exists(self, filename, writedir='.'):
+#        if os.path.exists(os.path.join(writedir, filename+'.lock')):
+#            return(True)
+#        else:
+#            return(False)
+
+#    def lock_file(self, filename, writedir='.'):
+#        while 1:
+#            time.sleep(np.random.uniform(0,1))
+#            is_first = self.first_in_queue(filename, writedir)
+#            is_lock = self.lock_exists(filename, writedir)
+#            if is_first:
+#                if not is_lock:
+#                    break
+#        with os.path.join(writedir, filename+'.lock') as f:
+#            f.write()
+
+
+
 
 class IPCoalWrapper:
     """
