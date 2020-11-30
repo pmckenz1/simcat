@@ -293,7 +293,7 @@ class Database:
                           data=np.zeros(shape=(lnodes[0],),
                                    dtype=np.int)
                           )
-        i5.create_dataset(names="treeheight", shape=(lnodes[0],), dtype=np.float64)
+        i5.create_dataset(name="treeheight", shape=(lnodes[0],), dtype=np.float64)
 
         # array of admixture quadruplets (source, dest, time, prop)
         ashape = (self.nstored_labels, self.nedges, 4)
