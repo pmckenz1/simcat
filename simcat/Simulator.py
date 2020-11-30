@@ -71,12 +71,12 @@ class Simulator:
         for slice0 in jobs:
             slice1 = min(nsims, slice0 + self.chunksize)
             if slice1 > slice0:
-                args = (self.labels, slice0, slice1, True)
+                args = (self.labels, sim_idxs[slice0:slice1], True)
                 rasyncs[slice0] = lbview.apply(IPCoalWrapper, *args)
 
         # catch results as they return and enter into H5 to keep mem low.
         progress = Progress(njobs, "Simulating count matrices", children)
-        progress.increment_all(self.checkpoint)
+        progress.increment_all(0)#self.checkpoint)
         if not self._quiet:
             progress.display()
         done = self.checkpoint
@@ -97,7 +97,9 @@ class Simulator:
 
                         # object returns, pull out results
                         res = rasync.get()
-                        io5["counts"][job:job + self.chunksize, :] = res.counts
+                        for rownum in range(res.counts.shape[0]):
+                            io5["counts"][sim_idxs[(job+rownum)], :] = res.counts[rownum]
+                        #io5["counts"][job:job + self.chunksize, :] = res.counts
 
                         # free up memory from job
                         del rasyncs[job]
@@ -177,7 +179,7 @@ class IPCoalWrapper:
             # store aligned SNPs
             self.nvalues = len(self.idxs)
             self.counts = np.zeros(
-                (self.nvalues, self.tree.ntips, self.nsnips), dtype=np.int64)
+                (self.nvalues, self.tree.ntips, self.nsnps), dtype=np.int64)
 
 
     def run(self):
@@ -186,8 +188,10 @@ class IPCoalWrapper:
         """
         # run simulations
         for idx in range(self.nvalues):
+            # shift root height
+            tree = self.tree.mod.node_scale_root_height(treeheight=self.treeheight[idx])
 
-            # modify the tree if ...
+            # node slide
             tree = self.tree.mod.node_slider(
                 prop=0.25, seed=self.slide_seeds[idx])
 
@@ -199,17 +203,20 @@ class IPCoalWrapper:
                 node.Ne = next(nes)
 
             # get admixture tuples (only supports 1 edge like this right now)
-            admix = (
-                int(self.admixture[idx, 0]),
-                int(self.admixture[idx, 1]),
-                self.admixture[idx, 2],
-                self.admixture[idx, 3],
-            )
+            admix = list()
+
+            for ad in self.admixture[idx]:
+                admix.append((
+                    int(ad[0]),
+                    int(ad[1]),
+                    ad[2],
+                    ad[3],
+                ))
 
             # build ipcoal Model object
             model = ipcoal.Model(
                 tree=tree,
-                admixture_edges=[admix],
+                admixture_edges=admix,
                 Ne=None,
                 )
 
