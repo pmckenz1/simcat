@@ -42,6 +42,18 @@ class Simulator:
         
         self._quiet = quiet
 
+        # store ipcluster information
+        self.ipcluster = {
+            "cluster_id": "",
+            "profile": "default",
+            "engines": "Local",
+            "quiet": 0,
+            "timeout": 60,
+            "cores": 0,
+            "threads": 2,
+            "pids": {},
+        }
+
 
     def _run(self, nsims, ipyclient, children=[]):
         """
