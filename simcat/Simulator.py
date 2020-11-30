@@ -138,7 +138,7 @@ class Simulator:
             progress.widget.close()
             print(
                 "completed {} simulations in {}."
-                .format(self.nsims, progress.elapsed)
+                .format(nsims, progress.elapsed)
             )
 
         finally:
