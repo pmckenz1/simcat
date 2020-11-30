@@ -290,7 +290,7 @@ class Database:
         i5.create_dataset(name="node_Nes", shape=allnodes, dtype=np.int64)
         i5.create_dataset(name="slide_seeds", shape=(lnodes[0],), dtype=np.int)
         i5.create_dataset(name="finished_sims",
-                          np.zeros(shape=(lnodes[0],),
+                          data=np.zeros(shape=(lnodes[0],),
                                    dtype=np.int)
                           )
 
