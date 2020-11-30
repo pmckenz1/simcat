@@ -54,6 +54,8 @@ class Simulator:
             "pids": {},
         }
 
+        self.checkpoint = 0
+
 
     def _run(self, nsims, ipyclient, children=[]):
         """
@@ -92,7 +94,7 @@ class Simulator:
 
         # catch results as they return and enter into H5 to keep mem low.
         progress = Progress(njobs, "Simulating count matrices", children)
-        progress.increment_all(0)#self.checkpoint)
+        progress.increment_all(self.checkpoint)
         if not self._quiet:
             progress.display()
         done = self.checkpoint
