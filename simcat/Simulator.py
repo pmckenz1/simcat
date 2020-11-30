@@ -164,7 +164,7 @@ class IPCoalWrapper:
     building the msprime simulations calls, and then calling .run() to fill
     count matrices and return them.
     """
-    def __init__(self, database_file, idxs, run=True, testcounter):
+    def __init__(self, database_file, idxs, run=True, testcounter=0):
 
         # location of data
         self.database = database_file
