@@ -141,6 +141,7 @@ class Database:
         # labels data file
         self.labels = os.path.realpath(
             os.path.join(workdir, "{}.labels.h5".format(self.name)))
+        # counts data file
         self.counts = os.path.realpath(
             os.path.join(workdir, "{}.counts.h5".format(self.name)))
         self.checkpoint = 0
@@ -288,6 +289,10 @@ class Database:
         i5.create_dataset(name="node_heights", shape=lnodes, dtype=np.int64)
         i5.create_dataset(name="node_Nes", shape=allnodes, dtype=np.int64)
         i5.create_dataset(name="slide_seeds", shape=(lnodes[0],), dtype=np.int)
+        i5.create_dataset(name="finished_sims",
+                          np.zeros(shape=(lnodes[0],),
+                                   dtype=np.int)
+                          )
 
         # array of admixture triplets (source, dest, time, prop)
         ashape = (self.nstored_labels, self.nedges, 4)
@@ -352,19 +357,15 @@ class Database:
             # ipops = popsizes[mask]
 
             # get n admixture edges (on this slide tree)
-            aedges = get_all_admix_edges(ntree, self.admix_edge_min, self.admix_prop_max, self.exclude_sisters)
+            aedges = list(get_all_admix_edges(ntree, self.admix_edge_min, self.admix_edge_max, self.exclude_sisters).keys())
 
-            # if node sliding changed naedges sub or super select random aedges 
-            if len(aedges) != self.naedges:
-                rgs = range(len(aedges))
-                aes = np.random.choice(rgs, self.naedges)
-                aedges = np.array(list(aedges))[aes]
+            # keep from picking an edge that's already placed!
+            for exedge in self.existing_admix_edges:
+                aedges.remove(exedge)
 
-            # adjust for maximum rows desired:
-            if len(aedges) > self.max_rows_per_test:
-                rgs = range(len(aedges))
-                aes = np.random.choice(rgs, self.max_rows_per_test)
-                aedges = np.array(list(aedges))[aes]
+            # pick random edges up to "rows per test"
+            aes = np.random.randint(0, len(aedges), self.max_rows_per_test)
+            aedges = np.array(aedges)[aes]
 
             # iterate over each placement of the edges
             for edgetup in aedges:
@@ -376,12 +377,17 @@ class Database:
                     for rep in range(self.nreps):
                         arr_h[idx] = iheights
                         arr_n[idx] = ne
-                        arr_a[idx] = (edgetup[0],
-                                      edgetup[1],
-                                      # here is where the timing is selected
-                                      np.random.uniform(self.admix_edge_min,
-                                                        self.admix_prop_max),
-                                      aprop)
+                        for aidx, exedge in enumerate(self.existing_admix_edges):
+                            arr_a[idx, aidx] = (exedge[0],exedge[1],# here is where the timing is selected
+                                                np.random.uniform(self.admix_edge_min,
+                                                                  self.admix_edge_max),
+                                                aprop)
+                        arr_a[idx, (self.nedges-1)] = (edgetup[0],
+                                                       edgetup[1],
+                                                       # here is where the timing is selected
+                                                       np.random.uniform(self.admix_edge_min,
+                                                                         self.admix_edge_max),
+                                                       aprop)
                         if self.node_slider:
                             arr_s[idx] = slide_seed
 
