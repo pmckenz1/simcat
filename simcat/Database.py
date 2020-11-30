@@ -57,6 +57,10 @@ class Database:
         of the tree in each simulation. Else different values are randomly 
         sampled for all edges of the tree in the selected range for ntests.
 
+    existing_admix_edges: list (default=list())
+        This should be a list of tuples. Each tuple should have two integers: a 
+        source edge and a destination edge. 
+
     nedges: int (default=0)
         The number of admixture edges to add to each tree at a time. All edges
         will be drawn on the tree that can connect any branches which overlap
@@ -101,7 +105,8 @@ class Database:
         name,
         workdir,
         tree,
-        n_admix_edges=1,
+        #n_admix_edges=1,
+        existing_admix_edges=list(),
         n_sampled_snps=20000,
         n_sampled_admix_prop=11,
         n_sampled_Ne=11,
@@ -146,6 +151,7 @@ class Database:
         # store params
         self.tree = (
             toytree.tree(tree) if isinstance(tree, str) else tree.copy())
+        self.existing_admix_edges = existing_admix_edges
         self.Ne_min = Ne_min
         self.Ne_max = Ne_max
         self.Ne_fixed = Ne_fixed
@@ -162,9 +168,12 @@ class Database:
         self.admix_prop_min = admix_prop_min
         self.admix_prop_max = admix_prop_max
         self.exclude_sisters = exclude_sisters
+        # vary the height!
+        self.heightmax = self.tree.treenode.height * 1.5
+        self.heightmin = self.tree.treenode.height * 0.5
 
         # database label combinations
-        self.nedges = n_admix_edges
+        self.nedges = len(self.existing_admix_edges)+1
         self.naprops = n_sampled_admix_prop
         self.nreps = n_sampled_reps
         self.nnes = n_sampled_Ne
@@ -179,7 +188,7 @@ class Database:
         # number of tests. 
         args = (self.tree, 0.5, 0.5, self.exclude_sisters)
         admixedges = get_all_admix_edges(*args)
-        self.aedges = list(itt.combinations(admixedges, self.nedges))
+        self.aedges = [self.existing_admix_edges + [i] for i in list(admixedges.keys())]
         self.naedges = min(self.max_rows_per_test, len(self.aedges))
         self.nstored_labels = (
             self.naedges * self.naprops * self.nreps * self.nnes)
@@ -281,7 +290,7 @@ class Database:
         i5.create_dataset(name="slide_seeds", shape=(lnodes[0],), dtype=np.int)
 
         # array of admixture triplets (source, dest, time, prop)
-        ashape = (self.nstored_labels, 4 * self.nedges)
+        ashape = (self.nstored_labels, self.nedges, 4)
         i5.create_dataset(name="admixture", shape=ashape, dtype=np.float64)
 
         # close the files
