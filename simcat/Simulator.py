@@ -26,7 +26,8 @@ class Simulator:
     def __init__(
         self,
         name,
-        workdir
+        workdir,
+        quiet=False,
         ):
 
         # database locations
@@ -39,6 +40,7 @@ class Simulator:
         self.counts = os.path.realpath(
             os.path.join(workdir, "{}.counts.h5".format(self.name)))
         
+        self._quiet = quiet
 
 
     def _run(self, nsims, ipyclient, children=[]):
@@ -122,7 +124,7 @@ class Simulator:
             progress.widget.close()
             print(
                 "completed {} simulations in {}."
-                .format(self.nstored_labels, progress.elapsed)
+                .format(self.nsims, progress.elapsed)
             )
 
         finally:
