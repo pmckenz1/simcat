@@ -329,7 +329,7 @@ class Database:
         chunksize = 10000
         arr_h = np.zeros((chunksize, self.inodes), dtype=np.int)
         arr_n = np.zeros((chunksize, self.tree.nnodes), dtype=np.int)
-        arr_a = np.zeros((chunksize, 4), dtype=np.float)
+        arr_a = np.zeros((chunksize, self.nedges, 4), dtype=np.float)
         arr_s = np.zeros((chunksize,), dtype=np.int)
 
         # test is a sampled nodeslide (heights, edges), migrate, migprop, Nes
