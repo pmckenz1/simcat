@@ -342,13 +342,13 @@ class Database:
             arr_h[idx] = iheights
             arr_n[idx] = popsizes
             for aidx, exedge in enumerate(self.existing_admix_edges):
-                arr_a[idx, aidx] = (exedge[0],exedge[1],# here is where the timing is selected
+                arr_a[idx, aidx] = (exedge[0], exedge[1],
                                     np.random.uniform(self.admix_edge_min,
                                                       self.admix_edge_max),
                                     np.random.uniform(self.admix_prop_min,
                                                       self.admix_prop_max))
-            arr_a[idx, (self.nedges-1)] = (aedges[0],
-                                           aedges[1],
+            arr_a[idx, (self.nedges-1)] = (aedges[0][0],
+                                           aedges[0][1],
                                            # here is where the timing is selected
                                            np.random.uniform(self.admix_edge_min,
                                                              self.admix_edge_max),
