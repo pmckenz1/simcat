@@ -240,6 +240,7 @@ class IPCoalWrapper:
 
             # attribute metadata
             self.tree = toytree.tree(io5.attrs["tree"])
+            self.tree = self.tree.mod.make_ultrametric()  # imprecision
             self.nsnps = io5.attrs["nsnps"]
             self.ntips = len(self.tree)
             self.node_slide_prop = io5.attrs["node_slide_prop"]

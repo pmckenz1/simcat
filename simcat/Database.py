@@ -138,8 +138,10 @@ class Database:
         self.tree = (
             toytree.tree(tree) if isinstance(tree, str) else tree.copy())
 
-        # deal with imprecision issues
+        # deal with imprecision issues by writing the newick and then converting
+        # to ultrametric
         self.tree = toytree.tree(self.tree.write())
+        self.tree = self.tree.mod.make_ultrametric()
         
         self.existing_admix_edges = existing_admix_edges
         self.Ne_min = Ne_min
