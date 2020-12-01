@@ -82,7 +82,7 @@ class Database:
         The number of SNPs in each simulation that are used to build the
         16x16 arrays of phylogenetic invariants for each quartet sample.
 
-    rows_per_test: int (default=None)
+    nrows: int (default=None)
         The maximum number of rows to include for each tree simulated on. If
         this value is smaller than the number of possible admixture edges, then
         the admixture events simulated will be randomly chosen for the list of
@@ -99,9 +99,9 @@ class Database:
         name,
         workdir,
         tree,
-        #n_admix_edges=1,
+        nrows=100,
+        nsnps=20000,
         existing_admix_edges=list(),
-        n_sampled_snps=20000,
         Ne_min=10000,
         Ne_max=100000,
         admix_prop_min=0.05,
@@ -109,12 +109,10 @@ class Database:
         admix_edge_min=0.5,
         admix_edge_max=0.5,
         exclude_sisters=False,
-        node_slider=True,
+        node_slide_prop=0.25,
         seed=None,
-        rows_per_test=None,
         force=False,
         quiet=False,
-        nthreads=2,
         ):
 
         # init random seed generator
@@ -135,7 +133,6 @@ class Database:
             os.path.join(workdir, "{}.counts.h5".format(self.name)))
         self.checkpoint = 0
         self._quiet = quiet
-        self._nthreads = nthreads
 
         # store params
         self.tree = (
@@ -144,9 +141,9 @@ class Database:
         self.Ne_min = Ne_min
         self.Ne_max = Ne_max
         self.inodes = self.tree.nnodes - self.tree.ntips
-        self.node_slider = node_slider
+        self.node_slide_prop = node_slide_prop
         
-        self.rows_per_test = rows_per_test
+        self.nrows = nrows
 
         self.admix_edge_min = admix_edge_min
         self.admix_edge_max = admix_edge_max
@@ -161,7 +158,7 @@ class Database:
         self.nedges = len(self.existing_admix_edges)+1
         self.naprops = 1  # n_sampled_admix_prop
         self.nnes = 1  # n_sampled_Ne
-        self.nsnps = n_sampled_snps
+        self.nsnps = nsnps
         self.nquarts = sum(1 for i in itt.combinations(range(tree.ntips), 4))
 
         # get number of places to put admix edges on THIS tree. If node slider
@@ -173,7 +170,7 @@ class Database:
         args = (self.tree, 0.5, 0.5, self.exclude_sisters)
         admixedges = get_all_admix_edges(*args)
         self.aedges = [self.existing_admix_edges + [i] for i in list(admixedges.keys())]
-        self.naedges = min(self.rows_per_test, len(self.aedges))
+        self.naedges = min(self.nrows, len(self.aedges))
         self.nstored_labels = (
             self.naedges * self.naprops * self.nnes)
 
@@ -256,6 +253,8 @@ class Database:
         o5.attrs["nquarts"] = self.nquarts
         i5.attrs["ntips"] = self.tree.ntips
         o5.attrs["ntips"] = self.tree.ntips
+        i5.attrs["node_slide_prop"] = self.node_slide_prop
+        o5.attrs["node_slide_prop"] = self.node_slide_prop
 
         # store data in separate dsets and with matrix shape so that in the 
         # analysis we can best take advantage of different combinations of the
@@ -295,7 +294,7 @@ class Database:
 
         # this generates node-specific random Ne values for each sampled Ne
         popsizes = np.random.uniform(
-            self.Ne_min, self.Ne_max, (self.rows_per_test, self.tree.nnodes))
+            self.Ne_min, self.Ne_max, (self.nrows, self.tree.nnodes))
 
         # arrays to write in chunks to the h5 array
         chunksize = 10000
@@ -315,12 +314,9 @@ class Database:
             ntree = self.tree.mod.node_scale_root_height(treeheight=newheight)
 
             # wiggle node heights
-            if self.node_slider:
-                prop = 0.25
-                slide_seed = self.random.randint(0, 1e12)
-                ntree = ntree.mod.node_slider(prop=prop, seed=slide_seed)
-            else:
-                ntree = ntree
+            prop = self.node_slide_prop
+            slide_seed = self.random.randint(0, 1e12)
+            ntree = ntree.mod.node_slider(prop=prop, seed=slide_seed)
 
             # store internal heights and Nes to array
             heights = ntree.get_node_values("height", 1, 1).astype(int)
@@ -336,7 +332,7 @@ class Database:
                 aedges.remove(exedge)
 
             # pick random edges up to "rows per test"
-            aes = np.random.randint(0, len(aedges), self.rows_per_test)
+            aes = np.random.randint(0, len(aedges), self.nrows)
             aedges = np.array(aedges)[aes]
 
             # iterate over each placement of the edges
@@ -360,8 +356,8 @@ class Database:
                                                                      self.admix_edge_max),
                                                    np.random.uniform(self.admix_prop_min,
                                                                      self.admix_prop_max))
-                    if self.node_slider:
-                        arr_s[idx] = slide_seed
+
+                    arr_s[idx] = slide_seed
                     arr_d[idx] = newheight
                     # advance counter
                     idx += 1

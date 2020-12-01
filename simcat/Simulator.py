@@ -242,6 +242,7 @@ class IPCoalWrapper:
             self.tree = toytree.tree(io5.attrs["tree"])
             self.nsnps = io5.attrs["nsnps"]
             self.ntips = len(self.tree)
+            self.node_slide_prop = io5.attrs["node_slide_prop"]
 
             # store aligned SNPs
             self.nvalues = len(self.idxs)
@@ -260,7 +261,7 @@ class IPCoalWrapper:
 
             # node slide
             tree = self.tree.mod.node_slider(
-                prop=0.25, seed=self.slide_seeds[idx])
+                prop=self.node_slide_prop, seed=self.slide_seeds[idx])
 
             # set Nes default and override on internal nodes with stored vals
             tree = tree.set_node_values("Ne", default=1e5)
