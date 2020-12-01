@@ -137,6 +137,10 @@ class Database:
         # store params
         self.tree = (
             toytree.tree(tree) if isinstance(tree, str) else tree.copy())
+
+        # deal with imprecision issues
+        self.tree = toytree.tree(self.tree.write())
+        
         self.existing_admix_edges = existing_admix_edges
         self.Ne_min = Ne_min
         self.Ne_max = Ne_max
