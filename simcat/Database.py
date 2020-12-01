@@ -52,11 +52,6 @@ class Database:
         Effective population size (Ne) maximum value sampled randomly 
         across ntests.
 
-    Ne_fixed: bool (default=True)
-        If True then a single Ne value is sampled and applied to all edges 
-        of the tree in each simulation. Else different values are randomly 
-        sampled for all edges of the tree in the selected range for ntests.
-
     existing_admix_edges: list (default=list())
         This should be a list of tuples. Each tuple should have two integers: a 
         source edge and a destination edge. 
@@ -87,12 +82,11 @@ class Database:
         The number of SNPs in each simulation that are used to build the
         16x16 arrays of phylogenetic invariants for each quartet sample.
 
-    max_rows_per_test: int (default=None)
+    rows_per_test: int (default=None)
         The maximum number of rows to include for each tree simulated on. If
         this value is smaller than the number of possible admixture edges, then
         the admixture events simulated will be randomly chosen for the list of
-        possible events. If max_rows_per_test=None, then all of the possible
-        admixture edges will be simulated on.
+        possible events.
 
     seed: int (default=None)
         Set the seed of the random number generator
@@ -110,10 +104,8 @@ class Database:
         n_sampled_snps=20000,
         n_sampled_admix_prop=11,
         n_sampled_Ne=11,
-        n_sampled_reps=1,
         Ne_min=10000,
         Ne_max=100000,
-        Ne_fixed=False,
         admix_prop_min=0.05,
         admix_prop_max=0.50,
         admix_edge_min=0.5,
@@ -121,7 +113,7 @@ class Database:
         exclude_sisters=False,
         node_slider=True,
         seed=None,
-        max_rows_per_test=None,
+        rows_per_test=None,
         force=False,
         quiet=False,
         random_sampling=True,
@@ -155,14 +147,10 @@ class Database:
         self.existing_admix_edges = existing_admix_edges
         self.Ne_min = Ne_min
         self.Ne_max = Ne_max
-        self.Ne_fixed = Ne_fixed
         self.inodes = self.tree.nnodes - self.tree.ntips
         self.node_slider = node_slider
         
-        if not max_rows_per_test:
-            self.max_rows_per_test = np.inf
-        else:
-            self.max_rows_per_test = max_rows_per_test
+        self.rows_per_test = rows_per_test
 
         self.admix_edge_min = admix_edge_min
         self.admix_edge_max = admix_edge_max
@@ -176,7 +164,6 @@ class Database:
         # database label combinations
         self.nedges = len(self.existing_admix_edges)+1
         self.naprops = n_sampled_admix_prop
-        self.nreps = n_sampled_reps
         self.nnes = n_sampled_Ne
         self.nsnps = n_sampled_snps
         self.nquarts = sum(1 for i in itt.combinations(range(tree.ntips), 4))
@@ -190,9 +177,9 @@ class Database:
         args = (self.tree, 0.5, 0.5, self.exclude_sisters)
         admixedges = get_all_admix_edges(*args)
         self.aedges = [self.existing_admix_edges + [i] for i in list(admixedges.keys())]
-        self.naedges = min(self.max_rows_per_test, len(self.aedges))
+        self.naedges = min(self.rows_per_test, len(self.aedges))
         self.nstored_labels = (
-            self.naedges * self.naprops * self.nreps * self.nnes)
+            self.naedges * self.naprops * self.nnes)
 
         # create or clear the database for writing
         self.init_databases(force)
@@ -317,15 +304,9 @@ class Database:
 
         # otherwise, we probably want to grid random admix props and random Nes
         else:
-            if self.Ne_fixed:
-                # this generates a single random Ne value for each sampled Ne
-                temp_popsizes = np.random.uniform(
-                    self.Ne_min, self.Ne_max, self.nnes)
-                popsizes = np.repeat(temp_popsizes, self.tree.nnodes).reshape(self.nnes, self.tree.nnodes)
-            else:
-                # this generates node-specific random Ne values for each sampled Ne
-                popsizes = np.random.uniform(
-                    self.Ne_min, self.Ne_max, (self.nnes, self.tree.nnodes))
+            # this generates node-specific random Ne values for each sampled Ne
+            popsizes = np.random.uniform(
+                self.Ne_min, self.Ne_max, (self.nnes, self.tree.nnodes))
 
         # arrays to write in chunks to the h5 array
         chunksize = 10000
@@ -366,7 +347,7 @@ class Database:
                 aedges.remove(exedge)
 
             # pick random edges up to "rows per test"
-            aes = np.random.randint(0, len(aedges), self.max_rows_per_test)
+            aes = np.random.randint(0, len(aedges), self.rows_per_test)
             aedges = np.array(aedges)[aes]
 
             # iterate over each placement of the edges
@@ -375,44 +356,42 @@ class Database:
                 # Ne applied to this edge
                 for ne in popsizes:
 
-                    # simulation replicates
-                    for rep in range(self.nreps):
-                        arr_h[idx] = iheights
-                        arr_n[idx] = ne
-                        for aidx, exedge in enumerate(self.existing_admix_edges):
-                            arr_a[idx, aidx] = (exedge[0],exedge[1],# here is where the timing is selected
-                                                np.random.uniform(self.admix_edge_min,
-                                                                  self.admix_edge_max),
-                                                np.random.uniform(self.admix_prop_min,
-                                                                  self.admix_prop_max))
-                        arr_a[idx, (self.nedges-1)] = (edgetup[0],
-                                                       edgetup[1],
-                                                       # here is where the timing is selected
-                                                       np.random.uniform(self.admix_edge_min,
-                                                                         self.admix_edge_max),
-                                                       np.random.uniform(self.admix_prop_min,
-                                                                         self.admix_prop_max))
-                        if self.node_slider:
-                            arr_s[idx] = slide_seed
-                        arr_d[idx] = newheight
-                        # advance counter
-                        idx += 1
+                    arr_h[idx] = iheights
+                    arr_n[idx] = ne
+                    for aidx, exedge in enumerate(self.existing_admix_edges):
+                        arr_a[idx, aidx] = (exedge[0],exedge[1],# here is where the timing is selected
+                                            np.random.uniform(self.admix_edge_min,
+                                                              self.admix_edge_max),
+                                            np.random.uniform(self.admix_prop_min,
+                                                              self.admix_prop_max))
+                    arr_a[idx, (self.nedges-1)] = (edgetup[0],
+                                                   edgetup[1],
+                                                   # here is where the timing is selected
+                                                   np.random.uniform(self.admix_edge_min,
+                                                                     self.admix_edge_max),
+                                                   np.random.uniform(self.admix_prop_min,
+                                                                     self.admix_prop_max))
+                    if self.node_slider:
+                        arr_s[idx] = slide_seed
+                    arr_d[idx] = newheight
+                    # advance counter
+                    idx += 1
 
-                        # reset arrs if bigger than chunksize
-                        if (idx == chunksize) or (idx == self.nstored_labels):
-                            with h5py.File(self.labels, 'a') as i5:
-                                i5["node_heights"][wdx:wdx + idx] = arr_h[:idx]
-                                i5["node_Nes"][wdx:wdx + idx] = arr_n[:idx]
-                                i5["admixture"][wdx:wdx + idx] = arr_a[:idx]
-                                i5["slide_seeds"][wdx:wdx + idx] = arr_s[:idx]
-                                i5["treeheight"][wdx:wdx + idx] = arr_d[:idx]
-                                arr_h[:] = 0
-                                arr_n[:] = 0
-                                arr_a[:] = 0
-                                arr_s[:] = 0
-                                arr_d[:] = 0
-                                wdx += idx
-                                idx = 0
+                    # reset arrs if bigger than chunksize
+                    if (idx == chunksize) or (idx == self.nstored_labels):
+                        with h5py.File(self.labels, 'a') as i5:
+                            i5["node_heights"][wdx:wdx + idx] = arr_h[:idx]
+                            i5["node_Nes"][wdx:wdx + idx] = arr_n[:idx]
+                            i5["admixture"][wdx:wdx + idx] = arr_a[:idx]
+                            i5["slide_seeds"][wdx:wdx + idx] = arr_s[:idx]
+                            i5["treeheight"][wdx:wdx + idx] = arr_d[:idx]
+                            arr_h[:] = 0
+                            arr_n[:] = 0
+                            arr_a[:] = 0
+                            arr_s[:] = 0
+                            arr_d[:] = 0
+                            wdx += idx
+                            idx = 0
 
 
 
