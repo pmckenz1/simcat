@@ -76,16 +76,16 @@ class Simulator:
         #self.chunksize = 4
 
         # designate lock files
-        labslock = fasteners.InterProcessReaderWriterLock(self.labels+'.lock')
-        countslock = fasteners.InterProcessReaderWriterLock(self.counts+'.lock')
+        labslock = fasteners.InterProcessLock(self.labels+'.lock')
+        countslock = fasteners.InterProcessLock(self.counts+'.lock')
 
-        labslock.acquire_write_lock()
+        labslock.acquire()
         with h5py.File(self.labels,'r+') as i5:
             finished_sims = i5['finished_sims']
             avail = np.where(~np.array(finished_sims).astype(bool))[0]
             sim_idxs = avail[:nsims]
             finished_sims[sim_idxs] = 2  # code of 2 indicates that these have started
-        labslock.release_write_lock()
+        labslock.release()
         # an iterator to return chunked slices of jobs
         jobs = range(0, nsims, self.chunksize)
         njobs = int(np.ceil(nsims / self.chunksize))
@@ -121,12 +121,12 @@ class Simulator:
 
                         # object returns, pull out results
                         res = rasync.get()
-                        countslock.acquire_write_lock()
+                        countslock.acquire()
                         with h5py.File(self.counts, mode='r+') as io5:
                             for rownum in range(res.counts.shape[0]):
                                 io5["counts"][sim_idxs[(job+rownum)], :] = res.counts[rownum]
                             #io5["counts"][job:job + self.chunksize, :] = res.counts
-                        countslock.release_write_lock()
+                        countslock.release()
                         # free up memory from job
                         del rasyncs[job]
 
@@ -141,11 +141,11 @@ class Simulator:
                     break
                 else:
                     time.sleep(0.5)
-            labslock.acquire_write_lock()
+            labslock.acquire()
             with h5py.File(self.labels,'r+') as i5:
                 finished_sims = i5['finished_sims']
                 finished_sims[sim_idxs] = 1
-            labslock.release_write_lock()
+            labslock.release()
 
             # on success: close the progress counter
             progress.widget.close()
