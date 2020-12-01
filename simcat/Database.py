@@ -102,8 +102,6 @@ class Database:
         #n_admix_edges=1,
         existing_admix_edges=list(),
         n_sampled_snps=20000,
-        n_sampled_admix_prop=11,
-        n_sampled_Ne=11,
         Ne_min=10000,
         Ne_max=100000,
         admix_prop_min=0.05,
@@ -163,8 +161,8 @@ class Database:
 
         # database label combinations
         self.nedges = len(self.existing_admix_edges)+1
-        self.naprops = n_sampled_admix_prop
-        self.nnes = n_sampled_Ne
+        self.naprops = 1  # n_sampled_admix_prop
+        self.nnes = 1  # n_sampled_Ne
         self.nsnps = n_sampled_snps
         self.nquarts = sum(1 for i in itt.combinations(range(tree.ntips), 4))
 
