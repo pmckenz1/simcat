@@ -170,9 +170,8 @@ class Database:
         args = (self.tree, 0.5, 0.5, self.exclude_sisters)
         admixedges = get_all_admix_edges(*args)
         self.aedges = [self.existing_admix_edges + [i] for i in list(admixedges.keys())]
-        self.naedges = min(self.nrows, len(self.aedges))
         self.nstored_labels = (
-            self.naedges * self.naprops * self.nnes)
+            self.nrows * self.naprops * self.nnes)
 
         # create or clear the database for writing
         self.init_databases(force)
