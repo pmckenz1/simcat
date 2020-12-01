@@ -114,7 +114,6 @@ class Database:
         rows_per_test=None,
         force=False,
         quiet=False,
-        random_sampling=True,
         nthreads=2,
         ):
 
@@ -136,7 +135,6 @@ class Database:
             os.path.join(workdir, "{}.counts.h5".format(self.name)))
         self.checkpoint = 0
         self._quiet = quiet
-        self._random_sampling = random_sampling
         self._nthreads = nthreads
 
         # store params
@@ -294,17 +292,10 @@ class Database:
         """
         Fill the h5 database with all labels.
         """
-        # sample admixture props randomly or uniformly?
-        if not self._random_sampling:
-            temp_popsizes = np.linspace(
-                self.Ne_min, self.Ne_max, self.nnes)
-            popsizes = np.repeat(temp_popsizes, self.tree.nnodes).reshape(self.nnes, self.tree.nnodes)
 
-        # otherwise, we probably want to grid random admix props and random Nes
-        else:
-            # this generates node-specific random Ne values for each sampled Ne
-            popsizes = np.random.uniform(
-                self.Ne_min, self.Ne_max, (self.nnes, self.tree.nnodes))
+        # this generates node-specific random Ne values for each sampled Ne
+        popsizes = np.random.uniform(
+            self.Ne_min, self.Ne_max, (self.rows_per_test, self.tree.nnodes))
 
         # arrays to write in chunks to the h5 array
         chunksize = 10000
