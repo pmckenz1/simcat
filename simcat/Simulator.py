@@ -76,8 +76,8 @@ class Simulator:
         #self.chunksize = 4
 
         # designate lock files
-        labslock = fasteners.fasteners.ReaderWriterLock()#InterProcessLock(self.labels+'.lock')
-        countslock = fasteners.fasteners.ReaderWriterLock()#InterProcessLock(self.counts+'.lock')
+        labslock = fasteners.ReaderWriterLock()#InterProcessLock(self.labels+'.lock')
+        countslock = fasteners.ReaderWriterLock()#InterProcessLock(self.counts+'.lock')
 
         with labslock.write_lock():
             with h5py.File(self.labels,'r+') as i5:
