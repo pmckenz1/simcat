@@ -76,10 +76,10 @@ class Simulator:
         #self.chunksize = 4
 
         # designate lock files
-        labslock = fasteners.ReaderWriterLock()#InterProcessLock(self.labels+'.lock')
-        countslock = fasteners.ReaderWriterLock()#InterProcessLock(self.counts+'.lock')
+        labslock = fasteners.InterProcessLock(self.labels+'.lock')
+        countslock = fasteners.InterProcessLock(self.counts+'.lock')
 
-        with labslock.write_lock():
+        with labslock:
             with h5py.File(self.labels,'r+') as i5:
                 finished_sims = i5['finished_sims']
                 avail = np.where(~np.array(finished_sims).astype(bool))[0]
@@ -121,7 +121,7 @@ class Simulator:
 
                         # object returns, pull out results
                         res = rasync.get()
-                        with countslock.write_lock():
+                        with countslock:
                             with h5py.File(self.counts, mode='r+') as io5:
                                 for rownum in range(res.counts.shape[0]):
                                     io5["counts"][sim_idxs[(job+rownum)], :] = res.counts[rownum]
@@ -141,7 +141,7 @@ class Simulator:
                     break
                 else:
                     time.sleep(0.5)
-            with labslock.write_lock():
+            with labslock:
                 with h5py.File(self.labels,'r+') as i5:
                     finished_sims = i5['finished_sims']
                     finished_sims[sim_idxs] = 1
