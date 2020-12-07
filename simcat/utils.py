@@ -340,15 +340,11 @@ def clean_db(name, workdir):
         labsmask = np.array(lfile['finished_sims']) == 0
 
     with h5py.File(countspath, 'r+') as cfile:
-        for simn in range(labsmask.shape[0]):
-            if not labsmask[simn]:
-                cfile['counts'][simn] = 0
-        countsmask = np.sum(np.sum(cfile['counts'], axis=1), axis=1) > 0
+        np.array(cfile['counts'])[labsmask] = 0
+        countsmask = (np.sum(np.sum(countsfile['counts'],axis=1),axis=1) == 0)
 
     with h5py.File(labspath, 'r+') as lfile:
-        for simn in range(countsmask.shape[0]):
-            if not countsmask[simn]:
-                lfile['finished_sims'][simn] = 0
+        np.array(lfile['finished_sims'])[countsmask] = 0
         done_sims = np.sum(np.array(lfile['finished_sims']) == 1)
         statement = "Done with {0} simulations, and {1} simulations remain.".format(done_sims, lfile['finished_sims'].shape[0] - done_sims)
 
