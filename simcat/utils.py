@@ -4,6 +4,8 @@ import time
 import datetime
 import itertools
 import numpy as np
+import h5py
+import os
 
 from ipywidgets import IntProgress, HTML, Box
 from IPython.display import display
@@ -324,6 +326,7 @@ def get_sister_idxs(tre):
             sisters.append(list(np.sort([i.idx for i in node.children])))
     return(sisters)
 
+
 def clean_db(name, workdir):
     """
     looks for finished_sims in the labels file that have a status of 2, and for 
@@ -340,8 +343,17 @@ def clean_db(name, workdir):
         for simn in range(labsmask.shape[0]):
             if not labsmask[simn]:
                 cfile['counts'][simn] = 0
-        for sim in countsfile['counts']:
-            np.sum(sim)
+        countsmask = np.sum(np.sum(cfile['counts'], axis=1), axis=1) > 0
+
+    with h5py.File(labspath, 'r+') as lfile:
+        for simn in range(countsmask.shape[0]):
+            if not countsmask[simn]:
+                lfile['finished_sims'][simn] = 0
+        done_sims = np.sum(np.array(lfile['finished_sims']) == 1)
+        statement = "Done with {0} simulations, and {1} simulations remain.".format(done_sims, lfile['finished_sims'].shape[0] - done_sims)
+
+    return(statement)
+
 
 
 
