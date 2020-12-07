@@ -79,13 +79,16 @@ class Simulator:
         labslock = fasteners.InterProcessLock(self.labels+'.lock')
         countslock = fasteners.InterProcessLock(self.counts+'.lock')
 
-        with labslock:
-            with h5py.File(self.labels,'r+') as i5:
-                finished_sims = i5['finished_sims']
-                avail = np.where(~np.array(finished_sims).astype(bool))[0]
-                sim_idxs = avail[:nsims]
-                finished_sims[sim_idxs] = 2  # code of 2 indicates that these have started
-        #labslock.release()
+        labslock.acquire(blocking=True,
+            delay=np.random.uniform(0.008, 0.015),
+            max_delay=np.random.uniform(0.1, 0.5),
+            timeout=60)
+        with h5py.File(self.labels,'r+') as i5:
+            finished_sims = i5['finished_sims']
+            avail = np.where(~np.array(finished_sims).astype(bool))[0]
+            sim_idxs = avail[:nsims]
+            finished_sims[sim_idxs] = 2  # code of 2 indicates that these have started
+        labslock.release()
         # an iterator to return chunked slices of jobs
         jobs = range(0, nsims, self.chunksize)
         njobs = int(np.ceil(nsims / self.chunksize))
@@ -121,12 +124,15 @@ class Simulator:
 
                         # object returns, pull out results
                         res = rasync.get()
-                        with countslock:
-                            with h5py.File(self.counts, mode='r+') as io5:
-                                for rownum in range(res.counts.shape[0]):
-                                    io5["counts"][sim_idxs[(job+rownum)], :] = res.counts[rownum]
+                        countslock.acquire(blocking=True,
+                                           delay=np.random.uniform(0.008, 0.015),
+                                           max_delay=np.random.uniform(0.1, 0.5),
+                                           timeout=120)
+                        with h5py.File(self.counts, mode='r+') as io5:
+                            for rownum in range(res.counts.shape[0]):
+                                io5["counts"][sim_idxs[(job+rownum)], :] = res.counts[rownum]
                                 #io5["counts"][job:job + self.chunksize, :] = res.counts
-                        #countslock.release()
+                        countslock.release()
                         # free up memory from job
                         del rasyncs[job]
 
@@ -141,11 +147,14 @@ class Simulator:
                     break
                 else:
                     time.sleep(0.5)
-            with labslock:
-                with h5py.File(self.labels,'r+') as i5:
-                    finished_sims = i5['finished_sims']
-                    finished_sims[sim_idxs] = 1
-            #labslock.release()
+            labslock.acquire(blocking=True,
+                             delay=np.random.uniform(0.008, 0.015),
+                             max_delay=np.random.uniform(0.1, 0.5),
+                             timeout=60)
+            with h5py.File(self.labels, 'r+') as i5:
+                finished_sims = i5['finished_sims']
+                finished_sims[sim_idxs] = 1
+            labslock.release()
 
             # on success: close the progress counter
             progress.widget.close()

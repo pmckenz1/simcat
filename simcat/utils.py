@@ -324,6 +324,33 @@ def get_sister_idxs(tre):
             sisters.append(list(np.sort([i.idx for i in node.children])))
     return(sisters)
 
+def clean_db(name, workdir):
+    """
+    looks for finished_sims in the labels file that have a status of 2, and for 
+    any that have status of 1 but have unfilled counts.
+    """
+    labspath = os.path.join(workdir, name + ".labels.h5")
+    countspath = os.path.join(workdir, name + ".counts.h5")
+
+    with h5py.File(labspath, 'r+') as lfile:
+        lfile['finished_sims'][np.array(lfile['finished_sims']) == 2] = 0
+        labsmask = np.array(lfile['finished_sims']) == 0
+
+    with h5py.File(countspath, 'r+') as cfile:
+        for simn in range(labsmask.shape[0]):
+            if not labsmask[simn]:
+                cfile['counts'][simn] = 0
+        for sim in countsfile['counts']:
+            np.sum(sim)
+
+
+
+def count_unfilled(name, workdir):
+    '''
+    Returns the number of remaining simulations in a database by looking at the 
+    finished_sims dataset in the labels file.
+    '''
+
 
 # def progress_bar(njobs, nfinished, start, message=""):
 #     "prints a progress bar"
