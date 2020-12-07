@@ -341,7 +341,7 @@ def clean_db(name, workdir):
 
     with h5py.File(countspath, 'r+') as cfile:
         np.array(cfile['counts'])[labsmask] = 0
-        countsmask = (np.sum(np.sum(countsfile['counts'],axis=1),axis=1) == 0)
+        countsmask = (np.sum(np.sum(cfile['counts'],axis=1),axis=1) == 0)
 
     with h5py.File(labspath, 'r+') as lfile:
         np.array(lfile['finished_sims'])[countsmask] = 0
