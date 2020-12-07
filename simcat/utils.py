@@ -347,8 +347,8 @@ def clean_db(name, workdir):
         np.array(lfile['finished_sims'])[countsmask] = 0
         done_sims = np.sum(np.array(lfile['finished_sims']) == 1)
         statement = "Done with {0} simulations, and {1} simulations remain.".format(done_sims, lfile['finished_sims'].shape[0] - done_sims)
-
-    return(statement)
+    print(statement)
+    return(lfile['finished_sims'].shape[0] - done_sims)
 
 
 
