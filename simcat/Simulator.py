@@ -18,6 +18,32 @@ from .utils import SimcatError, Progress
 from .parallel import Parallel
 import fasteners
 
+import sqlite3
+import io
+
+
+def adapt_array(arr):
+    """
+    http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
+    """
+    out = io.BytesIO()
+    np.save(out, arr)
+    out.seek(0)
+    return sqlite3.Binary(out.read())
+
+
+def convert_array(text):
+    out = io.BytesIO(text)
+    out.seek(0)
+    return np.load(out)
+
+
+# Converts np.array to TEXT when inserting
+sqlite3.register_adapter(np.ndarray, adapt_array)
+
+# Converts TEXT to np.array when selecting
+sqlite3.register_converter("array", convert_array)
+
 
 class Simulator:
     """
@@ -40,7 +66,9 @@ class Simulator:
         # counts data file
         self.counts = os.path.realpath(
             os.path.join(workdir, "{}.counts.h5".format(self.name)))
-        
+        # sql counts data file
+        self.sqldb = os.path.realpath(
+            os.path.join(workdir, "{}.counts.db".format(self.name)))
         self._quiet = quiet
 
         # store ipcluster information
@@ -124,15 +152,28 @@ class Simulator:
 
                         # object returns, pull out results
                         res = rasync.get()
-                        countslock.acquire(blocking=True,
-                                           delay=np.random.uniform(0.008, 0.015),
-                                           max_delay=np.random.uniform(0.1, 0.5),
-                                           timeout=120)
-                        with h5py.File(self.counts, mode='r+') as io5:
-                            for rownum in range(res.counts.shape[0]):
-                                io5["counts"][sim_idxs[(job+rownum)], :] = res.counts[rownum]
-                                #io5["counts"][job:job + self.chunksize, :] = res.counts
-                        countslock.release()
+
+                        con = sqlite3.connect(self.sqldb,
+                                              timeout=15,
+                                              detect_types=sqlite3.PARSE_DECLTYPES)
+                        cur = con.cursor()
+                        for id_ in range(res.counts.shape[0]):
+                            new_arr = res.counts[id_]
+                            cur.execute("update test set arr=? where id=?", (new_arr,job+id_))
+
+                        #countslock.acquire(blocking=True,
+                        #                   delay=np.random.uniform(0.008, 0.015),
+                        #                   max_delay=np.random.uniform(0.1, 0.5),
+                        #                   timeout=120)
+                        #with h5py.File(self.counts, mode='r+') as io5:
+                        #    for rownum in range(res.counts.shape[0]):
+                        #        io5["counts"][sim_idxs[(job+rownum)], :] = res.counts[rownum]
+                        #        #io5["counts"][job:job + self.chunksize, :] = res.counts
+                        #countslock.release()
+
+                        con.commit()
+                        con.close()
+
                         # free up memory from job
                         del rasyncs[job]
 

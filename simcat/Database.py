@@ -14,11 +14,35 @@ import time
 import itertools as itt
 import toytree
 import numpy as np
+import sqlite3  # for sqlite3 db
+import io  # for splite3 db
 
 from .parallel import Parallel
 from .Simulator import IPCoalWrapper
 from .utils import get_all_admix_edges, SimcatError, Progress
 
+
+def adapt_array(arr):
+    """
+    http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
+    """
+    out = io.BytesIO()
+    np.save(out, arr)
+    out.seek(0)
+    return sqlite3.Binary(out.read())
+
+
+def convert_array(text):
+    out = io.BytesIO(text)
+    out.seek(0)
+    return np.load(out)
+
+
+# Converts np.array to TEXT when inserting
+sqlite3.register_adapter(np.ndarray, adapt_array)
+
+# Converts TEXT to np.array when selecting
+sqlite3.register_converter("array", convert_array)
 
 
 class Database:
@@ -131,6 +155,9 @@ class Database:
         # counts data file
         self.counts = os.path.realpath(
             os.path.join(workdir, "{}.counts.h5".format(self.name)))
+        # sql counts data file
+        self.sqldb = os.path.realpath(
+            os.path.join(workdir, "{}.counts.db".format(self.name)))
         self.checkpoint = 0
         self._quiet = quiet
 
@@ -239,6 +266,9 @@ class Database:
         if not os.path.exists(self.labels):
             i5 = h5py.File(self.labels, mode='w')
             o5 = h5py.File(self.counts, mode='w')
+            con = sqlite3.connect(self.sqldb, detect_types=sqlite3.PARSE_DECLTYPES)
+            cur = con.cursor()
+            cur.execute("create table counts (id integer PRIMARY KEY, arr array)")
         else:
             if force:
                 i5 = h5py.File(self.labels, mode='w')
@@ -268,6 +298,13 @@ class Database:
 
         # countsize = (self.nstored_labels, snps + svdu + svdv + svds + mvar)
         o5.create_dataset(name="counts", shape=smat, dtype=np.int64, compression="gzip")
+
+        z_a = np.zeros((smat[1], smat[2]), dtype=int)
+        for id_ in range(smat[0]):
+            cur.execute("insert into test (id, arr) values (?, ?)", (id_, z_a,))
+
+        con.commit()
+        con.close()
 
         # array of node heights,Nes in traverse order (-tips)
         lnodes = (self.nstored_labels, self.inodes)
