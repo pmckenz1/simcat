@@ -301,7 +301,7 @@ class Database:
 
         z_a = np.zeros((smat[1], smat[2]), dtype=int)
         for id_ in range(smat[0]):
-            cur.execute("insert into test (id, arr) values (?, ?)", (id_, z_a,))
+            cur.execute("insert into counts (id, arr) values (?, ?)", (id_, z_a,))
 
         con.commit()
         con.close()
