@@ -335,6 +335,42 @@ def clean_db(name, workdir):
     labspath = os.path.join(workdir, name + ".labels.h5")
     countspath = os.path.join(workdir, name + ".counts.h5")
 
+    # first, check for corrupt any corrupt rows:
+    with h5py.File(countspath, 'r+') as cfile:
+        try:
+            np.sum(cfile['counts'], axis=1)
+            print("There are 0 corrupt rows.")
+        except(OSError):
+            counter = 0
+            faillist = []
+            for i in range(cfile['counts'].shape[0]):
+                try:
+                    cfile['counts'][i]
+                except(OSError):  # OSError
+                    faillist.append(counter)  # keep track of idxs that are corrupt
+                counter += 1
+            print("There are {} corrupt rows. Removing these...".format(len(faillist)))
+            # save the indexes of not-corrupt rows
+            successes = np.array(list(set(list(range(cfile['counts'].shape[0]))).difference(faillist)))
+
+            # start a separate, temporary dataset
+            cc = cfile.create_dataset(name="counts_clean",
+                                      shape=cfile['counts'].shape,
+                                      dtype=int)
+
+            # fill the non-corrupt rows with their data
+            cc[successes] = cfile['counts'][successes]
+
+            # fill the corrupt rows with zeros
+            cc[np.array(faillist)] = np.zeros((len(faillist),
+                                               cfile['counts'].shape[1],
+                                               cfile['counts'].shape[2]
+                                               ), dtype=int)
+            del cfile['counts']  # remove the corrupt dataset
+            cfile['counts'] = cc  # redefine the corrupt dataset
+            del cc  # remove the temporary dataset
+            print("Done removing corrupt rows.")
+
     with h5py.File(labspath, 'r+') as lfile:
         lfile['finished_sims'][np.array(lfile['finished_sims']) == 2] = 0
         labsmask = np.array(lfile['finished_sims']) == 0
@@ -351,14 +387,19 @@ def clean_db(name, workdir):
     return(lfile['finished_sims'].shape[0] - done_sims)
 
 
-
-
 def count_unfilled(name, workdir):
     '''
     Returns the number of remaining simulations in a database by looking at the 
     finished_sims dataset in the labels file.
     '''
+    pass
 
+
+def truncate_db(name, workdir):
+    '''
+    Finds and removed any unfinished runs from the database.
+    '''
+    pass
 
 # def progress_bar(njobs, nfinished, start, message=""):
 #     "prints a progress bar"
