@@ -388,10 +388,11 @@ def clean_db(name, workdir):
         lfile['finished_sims'][countsmask] = np.zeros((len(countsmask),),
                                                       dtype=int)
         done_sims = np.sum(np.array(lfile['finished_sims']) == 1)
-        statement = "Done with {0} simulations, and {1} simulations remain.".format(done_sims, lfile['finished_sims'].shape[0] - done_sims)
+        remaining_sims = lfile['finished_sims'].shape[0] - done_sims
+        statement = "Done with {0} simulations, and {1} simulations remain.".format(done_sims, remaining_sims)
 
     print(statement)
-    return(lfile['finished_sims'].shape[0] - done_sims)
+    return(remaining_sims)
 
 
 def count_unfilled(name, workdir):
