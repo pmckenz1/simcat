@@ -71,6 +71,7 @@ class Simulator:
         # ...
 
         ###############
+        # sqlite register functions for np arrays
         def adapt_array(arr):
             """
             http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
@@ -79,7 +80,6 @@ class Simulator:
             np.save(out, arr)
             out.seek(0)
             return sqlite3.Binary(out.read())
-
 
         def convert_array(text):
             out = io.BytesIO(text)
@@ -93,7 +93,7 @@ class Simulator:
         # Converts TEXT to np.array when selecting
         sqlite3.register_converter("array", convert_array)
         ####################
-        
+
         # load-balancer for distributed parallel jobs
         lbview = ipyclient.load_balanced_view()
 
@@ -106,7 +106,7 @@ class Simulator:
 
         # designate lock files
         labslock = fasteners.InterProcessLock(self.labels+'.lock')
-        countslock = fasteners.InterProcessLock(self.counts+'.lock')
+        #countslock = fasteners.InterProcessLock(self.counts+'.lock')
 
         labslock.acquire(blocking=True,
             delay=np.random.uniform(0.008, 0.015),
@@ -162,7 +162,7 @@ class Simulator:
                             new_arr = res.counts[id_]
                             print(new_arr)
                             print(sim_idxs[job+id_])
-                            result = cur.execute("update counts set arr=? where id={}".format(sim_idxs[job+id_]), (new_arr,))
+                            result = cur.execute("update counts set arr=? where id=?", (new_arr, sim_idxs[job+id_]))
                             print(result)
                             cur.execute("select arr from counts where id={}".format(sim_idxs[job+id_]))
                             data = cur.fetchone()
