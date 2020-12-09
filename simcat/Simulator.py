@@ -154,7 +154,7 @@ class Simulator:
                         res = rasync.get()
 
                         con = sqlite3.connect(self.sqldb,
-                                              timeout=15,
+                                              timeout=120,
                                               detect_types=sqlite3.PARSE_DECLTYPES)
                         cur = con.cursor()
                         for id_ in range(res.counts.shape[0]):
