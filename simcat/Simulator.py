@@ -159,7 +159,8 @@ class Simulator:
                         cur = con.cursor()
                         for id_ in range(res.counts.shape[0]):
                             new_arr = res.counts[id_]
-                            cur.execute("update counts set arr=? where id=?", (new_arr, job+id_))
+                            print(sim_idxs[job+id_])
+                            cur.execute("update counts set arr=? where id=?", (new_arr, sim_idxs[job+id_]))
 
                         #countslock.acquire(blocking=True,
                         #                   delay=np.random.uniform(0.008, 0.015),
