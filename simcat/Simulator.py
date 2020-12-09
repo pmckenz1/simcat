@@ -22,6 +22,29 @@ import sqlite3
 import io
 
 
+# sqlite register functions to handle np arrays
+def adapt_array(arr):
+    """
+    http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
+    """
+    out = io.BytesIO()
+    np.save(out, arr)
+    out.seek(0)
+    return sqlite3.Binary(out.read())
+
+
+def convert_array(text):
+    out = io.BytesIO(text)
+    out.seek(0)
+    return np.load(out)
+
+
+# Converts np.array to TEXT when inserting
+sqlite3.register_adapter(np.ndarray, adapt_array)
+
+# Converts TEXT to np.array when selecting
+sqlite3.register_converter("array", convert_array)
+
 class Simulator:
     """
     This is the object that points to an existing database, extracts some rows, 
@@ -69,30 +92,6 @@ class Simulator:
         """
         # if outfile exists and not force then find checkpoint
         # ...
-
-        ###############
-        # sqlite register functions for np arrays
-        def adapt_array(arr):
-            """
-            http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
-            """
-            out = io.BytesIO()
-            np.save(out, arr)
-            out.seek(0)
-            return sqlite3.Binary(out.read())
-
-        def convert_array(text):
-            out = io.BytesIO(text)
-            out.seek(0)
-            return np.load(out)
-
-
-        # Converts np.array to TEXT when inserting
-        sqlite3.register_adapter(np.ndarray, adapt_array)
-
-        # Converts TEXT to np.array when selecting
-        sqlite3.register_converter("array", convert_array)
-        ####################
 
         # load-balancer for distributed parallel jobs
         lbview = ipyclient.load_balanced_view()
@@ -162,7 +161,7 @@ class Simulator:
                             new_arr = res.counts[id_]
                             print(new_arr)
                             print(sim_idxs[job+id_])
-                            result = cur.execute("update counts set arr=? where id=?", (new_arr, sim_idxs[job+id_]))
+                            result = cur.execute("update counts set arr=? where id={}".format(sim_idxs[job+id_]), (new_arr, ))
                             print(result)
                             cur.execute("select arr from counts where id={}".format(sim_idxs[job+id_]))
                             data = cur.fetchone()
