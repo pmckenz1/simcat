@@ -152,9 +152,9 @@ class Simulator:
 
                         # object returns, pull out results
                         res = rasync.get()
-
+                        timeout_time = np.random.randint(100,400)
                         con = sqlite3.connect(self.sqldb,
-                                              timeout=120,
+                                              timeout=timeout_time,
                                               detect_types=sqlite3.PARSE_DECLTYPES)
                         cur = con.cursor()
                         for id_ in range(res.counts.shape[0]):
