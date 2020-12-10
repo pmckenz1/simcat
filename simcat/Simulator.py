@@ -156,10 +156,11 @@ class Simulator:
                         con = sqlite3.connect(self.sqldb,
                                               timeout=timeout_time,
                                               detect_types=sqlite3.PARSE_DECLTYPES)
-                        cur = con.cursor()
                         for id_ in range(res.counts.shape[0]):
                             new_arr = res.counts[id_]
+                            cur = con.cursor()
                             cur.execute("update counts set arr=? where id={}".format(sim_idxs[job+id_]), (new_arr, ))
+                            cur.close()
 
                         #countslock.acquire(blocking=True,
                         #                   delay=np.random.uniform(0.008, 0.015),
