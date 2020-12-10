@@ -152,7 +152,7 @@ class Simulator:
 
                         # object returns, pull out results
                         res = rasync.get()
-                        timeout_time = np.random.randint(100,400)
+                        timeout_time = np.random.randint(600,900)
                         con = sqlite3.connect(self.sqldb,
                                               timeout=timeout_time,
                                               detect_types=sqlite3.PARSE_DECLTYPES)
