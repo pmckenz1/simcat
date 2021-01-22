@@ -250,10 +250,15 @@ class BatchTrain:
 
         labels = dict(zip(an_file['labels'][:, 0], an_file['labels'][:, 1]))
 
+        newick = an_file.attrs['newick']
+        nquarts = an_file.attrs['nquarts']
+
         training_batch_generator = DataGenerator(np.array(an_file['training']),
                                                  labels,
                                                  countsfile,
                                                  n_classes,
+                                                 newick,
+                                                 nquarts,
                                                  batch_size
                                                  )
 
@@ -292,14 +297,16 @@ class DataGenerator(Sequence):
                  labels,
                  data_file,
                  n_classes,
+                 newick,
+                 nquarts,
                  batch_size=32,
                  shuffle=True):
         'Initialization'
         self.batch_size = batch_size
         self.labels = labels
         self.data_file = data_file
-        self.tree = toytree.tree(data_file.attrs['tree'])
-        self.nquarts = data_file.attrs['nquarts']
+        self.tree = toytree.tree(newick)
+        self.nquarts = nquarts
         self.list_IDs = list_IDs
         self.n_classes = n_classes
         self.shuffle = shuffle
