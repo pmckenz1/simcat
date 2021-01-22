@@ -153,13 +153,6 @@ class BatchTrain:
         training_idxs = np.sort(np.random.choice(all_viable_idxs,num_training,replace=False))
         testing_idxs = np.sort(np.array(list(set(all_viable_idxs).difference(set(training_idxs)))))
 
-        self.write_files_from_idxs(idxs=training_idxs,
-                                   name=self.output_name+".training",
-                                   labsfile=labsfile)
-        self.write_files_from_idxs(idxs=testing_idxs,
-                                   name=self.output_name+".testing",
-                                   labsfile=labsfile)
-
         self.analysis_filepath = os.path.join(self.directory,self.output_name+'.analysis.h5')
         an_file = h5py.File(self.analysis_filepath, 'w')
 
