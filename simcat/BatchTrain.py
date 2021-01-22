@@ -9,6 +9,7 @@ import numpy as np
 import os
 import toytree
 import pandas as pd
+import sqlite3
 
 from simcat.utils import get_snps_count_matrix
 from keras.utils import to_categorical
@@ -50,33 +51,82 @@ class BatchTrain:
         self.counts_filepath = os.path.join(directory, input_name+'.counts.h5')
         self.labs_filepath = os.path.join(directory, input_name+'.labels.h5')
 
+        if not os.path.exists(self.counts_filepath):
+            if os.path.exists(os.path.join(directory, input_name+'.counts.db')):
+                print("hdf5 counts file does not yet exist. Converting SQL database to hdf5...")
+                self.write_sql_counts_to_h5()
+
         if not self.exists:
             self.write_ref_files()
         else:
             self.load()
+
+    def write_sql_counts_to_h5(self):
+        sql_path = os.path.join(self.directory, self.input_name+'.counts.db')
+        labsfile = h5py.File(self.labs_filepath,'r')
+        num_full_dat = labsfile['finished_sims'].shape[0]
+        labsfile.close()
+
+        # get the alignment shape
+        con = sqlite3.connect(sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        cur = con.cursor()
+
+        cur.execute("select arr from counts where id={}".format(0))
+        data = cur.fetchone()
+        countshape = data[0].shape
+
+        con.close()
+
+        o5 = h5py.File(self.counts_filepath, mode='w')
+        o5.create_dataset(name="counts",
+                          shape=(num_full_dat,
+                                 countshape[0],
+                                 countshape[1]),
+                          dtype=np.int64,
+                          compression="gzip")
+
+        con = sqlite3.connect(sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        cur = con.cursor()
+
+        for simulation_number in range(num_full_dat):
+            cur.execute("select arr from counts where id={}".format(simulation_number))
+            data = cur.fetchone()
+            o5['counts'][simulation_number] = data[0]
+
+        con.close()
+        o5.close()
 
 
     def write_ref_files(self):
 
         # get total simulations to include
 
-        countsfile = h5py.File(self.counts_filepath,'r')
+        #countsfile = h5py.File(self.counts_filepath,'r')
         labsfile = h5py.File(self.labs_filepath,'r')
 
-        sister_idxs = get_sister_idxs(toytree.tree(countsfile.attrs['tree']))
-        self.newick = countsfile.attrs['tree']
-        self.nquarts = countsfile.attrs['nquarts']
+        sister_idxs = get_sister_idxs(toytree.tree(labsfile.attrs['tree']))
+        self.newick = labsfile.attrs['tree']
+        self.nquarts = labsfile.attrs['nquarts']
 
-        num_full_dat = countsfile['counts'].shape[0]
+        num_full_dat = labsfile['finished_sims'].shape[0]
 
         print(str(num_full_dat) + " total simulations.")
 
         all_viable_idxs = np.array(range(num_full_dat))
 
-        is_sister_bool = np.array([list(scen) in sister_idxs for scen in np.sort(labsfile['admixture'][:,:2].astype(int))])
+        # which ones are unfinished?
+        is_unfinished_bool = ~np.array(labsfile['finished_sims']).astype(bool)
+
+        # if exlcuding sisters, which are sisters?
+        if self.exclude_sisters:
+            is_sister_bool = np.array([list(scen) in sister_idxs for scen in np.sort(labsfile['admixture'][:,:2].astype(int))])
+        else:  # otherwise call none of them sisters
+            is_sister_bool = np.zeros((num_full_dat),dtype=bool)
+
+        # if excluding under a magnitude, which are under that magnitude?
         exclude_mag_bool = labsfile['admixture'][:,3] < self.exclude_magnitude
 
-        keeper_idxs_mask = ~(is_sister_bool + exclude_mag_bool)
+        keeper_idxs_mask = ~(is_unfinished_bool + is_sister_bool + exclude_mag_bool)
 
         all_viable_idxs = all_viable_idxs[keeper_idxs_mask]
 
@@ -91,12 +141,19 @@ class BatchTrain:
         training_idxs = np.sort(np.random.choice(all_viable_idxs,num_training,replace=False))
         testing_idxs = np.sort(np.array(list(set(all_viable_idxs).difference(set(training_idxs)))))
 
-        self.analysis_filepath = os.path.join(self.directory,self.output_name+'.analysis.h5')
-        an_file= h5py.File(self.analysis_filepath,'w')
+        self.write_files_from_idxs(idxs=training_idxs,
+                                   name=self.output_name+".training",
+                                   labsfile=labsfile)
+        self.write_files_from_idxs(idxs=testing_idxs,
+                                   name=self.output_name+".testing",
+                                   labsfile=labsfile)
 
-        an_file.create_dataset('viable',shape=all_viable_idxs.shape,data=all_viable_idxs)
-        an_file.create_dataset('training',shape=training_idxs.shape,data=training_idxs)
-        an_file.create_dataset('testing',shape=testing_idxs.shape, data=testing_idxs)
+        self.analysis_filepath = os.path.join(self.directory,self.output_name+'.analysis.h5')
+        an_file = h5py.File(self.analysis_filepath, 'w')
+
+        an_file.create_dataset('viable', shape=all_viable_idxs.shape,data=all_viable_idxs)
+        an_file.create_dataset('training', shape=training_idxs.shape,data=training_idxs)
+        an_file.create_dataset('testing', shape=testing_idxs.shape, data=testing_idxs)
 
         # make one-hot dictionary
         str_categories = []
@@ -109,7 +166,7 @@ class BatchTrain:
         self.num_classes = len(unique_labs)
         an_file.attrs['num_classes'] = self.num_classes
 
-        self.input_shape = np.prod(countsfile['counts'].shape[1:])
+        self.input_shape = self.nquarts * 16 * 16
         an_file.attrs['input_shape'] = self.input_shape
 
         self.onehot_dict_path = os.path.join(self.directory,self.output_name+'.onehot_dict.csv')
@@ -136,7 +193,6 @@ class BatchTrain:
         an_file.attrs['nquarts'] = self.nquarts
 
         an_file.close()
-        countsfile.close()
         labsfile.close()
 
         print('')
@@ -188,10 +244,6 @@ class BatchTrain:
         n_classes = an_file.attrs['num_classes']
 
         labels = dict(zip(an_file['labels'][:, 0], an_file['labels'][:, 1]))
-        #training_batch_generator = My_Custom_Generator(np.array(an_file['training']),
-        #                                               batch_size,
-        #                                               an_file,
-        #                                               countsfile)
 
         training_batch_generator = DataGenerator(np.array(an_file['training']),
                                                  labels,
@@ -206,11 +258,6 @@ class BatchTrain:
                                                    n_classes,
                                                    batch_size
                                                    )
-
-        #validation_batch_generator = My_Custom_Generator(np.array(an_file['testing']),
-        #                                                 batch_size,
-        #                                                 an_file,
-        #                                                 countsfile)
 
         # Train model on dataset
         self.model.fit_generator(generator=training_batch_generator,
@@ -273,7 +320,7 @@ class DataGenerator(Sequence):
     def on_epoch_end(self):
         'Updates indexes after each epoch'
         self.indexes = np.arange(len(self.list_IDs))
-        if self.shuffle == True:
+        if self.shuffle:
             np.random.shuffle(self.indexes)
 
     def __data_generation(self, list_IDs_temp):
@@ -284,7 +331,7 @@ class DataGenerator(Sequence):
         X_ = np.array([self.data_file['counts'][_] for _ in list_IDs_temp])
         X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
         for row in range(X.shape[0]):
-            X = np.array([get_snps_count_matrix(self.tree, X_[row])])
+            X[row] = np.array([get_snps_count_matrix(self.tree, X_[row])])
         X = X.reshape(X.shape[0], -1)
         X = X / X.max()
         
@@ -295,35 +342,6 @@ class DataGenerator(Sequence):
 
         return X, to_categorical(y, num_classes=self.n_classes)
 
-class My_Custom_Generator(Sequence):
-
-    def __init__(self, database_idxs, batch_size, analysis_file, counts_file) :
-        self.database_idxs = database_idxs
-        self.batch_size = batch_size
-        self.analysis_file = analysis_file
-        self.counts_file = counts_file
-
-    def __len__(self):
-        return (np.ceil(len(self.database_idxs) / float(self.batch_size))).astype(np.int)
-
-    def __getitem__(self, idx):
-        batch_idxs = self.database_idxs[idx * self.batch_size : (idx+1) * self.batch_size]
-
-        filler = np.zeros((len(batch_idxs)),dtype=np.int)
-        counter = 0
-        for i_ in batch_idxs:
-            filler[counter] = np.argmax(self.analysis_file['labels'][:,0] == i_)
-            counter = counter + 1
-
-        batch_y_ints = np.array([self.analysis_file['labels'][_,1] for _ in filler]) 
-        batch_y = to_categorical(batch_y_ints,
-                                 num_classes=self.analysis_file.attrs['num_classes'])
-
-        batch_x = np.array([self.counts_file['counts'][_] for _ in batch_idxs])
-        batch_x = batch_x.reshape(batch_x.shape[0], -1)
-        batch_x = batch_x / batch_x.max()
-
-        return batch_x, batch_y
 
 def get_sister_idxs(tre):
     sisters = []
