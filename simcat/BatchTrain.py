@@ -266,6 +266,8 @@ class BatchTrain:
                                                    labels,
                                                    countsfile,
                                                    n_classes,
+                                                   newick,
+                                                   nquarts
                                                    batch_size
                                                    )
 
