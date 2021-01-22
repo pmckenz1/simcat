@@ -83,8 +83,16 @@ class BatchTrain:
                           shape=(num_full_dat,
                                  countshape[0],
                                  countshape[1]),
-                          dtype=np.int64,
-                          compression="gzip")
+                          dtype=np.int64)
+        #o5.create_dataset('counts',
+        #                  shape=(num_full_dat,
+        #                         countshape[0],
+        #                         countshape[1]),
+        #                  data=np.zeros((num_full_dat,
+        #                                 countshape[0],
+        #                                 countshape[1]),
+        #                                dtype=np.int64)
+        #                  )
 
         con = sqlite3.connect(sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
         cur = con.cursor()
