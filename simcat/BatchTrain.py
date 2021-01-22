@@ -27,7 +27,12 @@ class BatchTrain:
                  exclude_magnitude=0.1,
                  to_zero_magnitude=0,
                  directionality=True,
+                 exclude_mask=None,
                  ):
+        '''
+        exclude_mask: np.array (bool).
+            specifies certain rows to exclude -- maybe because they aren't done.
+        '''
         self.input_name = input_name
         self.output_name = output_name
         self.directory = directory
@@ -61,7 +66,6 @@ class BatchTrain:
         sister_idxs = get_sister_idxs(toytree.tree(countsfile.attrs['tree']))
         self.newick = countsfile.attrs['tree']
         self.nquarts = countsfile.attrs['nquarts']
-
 
         num_full_dat = countsfile['counts'].shape[0]
 

@@ -6,6 +6,7 @@ import itertools
 import numpy as np
 import h5py
 import os
+import sqlite3
 
 from ipywidgets import IntProgress, HTML, Box
 from IPython.display import display
@@ -328,86 +329,54 @@ def get_sister_idxs(tre):
 
 
 def clean_db(name, workdir):
-    """
-    looks for finished_sims in the labels file that have a status of 2, and for 
-    any that have status of 1 but have unfilled counts.
-    """
-    labspath = os.path.join(workdir, name + ".labels.h5")
-    countspath = os.path.join(workdir, name + ".counts.h5")
+    # open labels file
+    labsfile = h5py.File(os.path.join(workdir, name+'.labels.h5'), 'r+')
+    # get the anticipated total number
+    num_total = labsfile['finished_sims'].shape[0]
 
-    # first, check for corrupt any corrupt rows:
-    with h5py.File(countspath, 'r+') as cfile:
-        try:
-            np.sum(cfile['counts'], axis=1)
-            print("There are 0 corrupt rows.")
-        except(OSError):
-            counter = 0
-            faillist = []
-            for i in range(cfile['counts'].shape[0]):
-                try:
-                    cfile['counts'][i]
-                except(OSError):  # OSError
-                    faillist.append(counter)  # keep track of idxs that are corrupt
-                counter += 1
-            print("There are {} corrupt rows. Removing these...".format(len(faillist)))
-            # save the indexes of not-corrupt rows
-            successes = np.array(list(set(list(range(cfile['counts'].shape[0]))).difference(faillist)))
+    # start an empty array to store how many filled counts arrays there are
+    finished_counts = np.zeros((num_total,), dtype=int)
 
-            # start a separate, temporary dataset
-            cc = cfile.create_dataset(name="counts_clean",
-                                      shape=cfile['counts'].shape,
-                                      dtype=int)
+    # iter through the counts arrays in sql database
+    con = sqlite3.connect(os.path.join(workdir, name+'.counts.db'), detect_types=sqlite3.PARSE_DECLTYPES)
+    cur = con.cursor()
 
-            # fill the non-corrupt rows with their data
-            cc[successes] = cfile['counts'][successes]
+    for id_ in range(num_total):
+        cur.execute("select arr from counts where id={}".format(id_))
+        data = cur.fetchone()
+        if np.sum(data[0]) > 0:
+            finished_counts[id_] = 1
+        #finished_counts[id_] = np.sum(data[0])
 
-            # fill the corrupt rows with zeros
-            cc[np.array(faillist)] = np.zeros((len(faillist),
-                                               cfile['counts'].shape[1],
-                                               cfile['counts'].shape[2]
-                                               ), dtype=int)
-            del cfile['counts']  # remove the corrupt dataset
-            cfile['counts'] = cc  # redefine the corrupt dataset
-            del cc  # remove the temporary dataset
-            print("Done removing corrupt rows.")
+    con.close()
 
-    with h5py.File(labspath, 'r+') as lfile:
-        lfile['finished_sims'][np.array(lfile['finished_sims']) == 2] = 0
-        labsmask = np.array(lfile['finished_sims']) == 0
-        labsmask = np.where(labsmask)[0]
+    # now adjust the "finished" labels in case the counts aren't filled
+    # but labels are
+    for i in range(num_total):
+        if not finished_counts[i]:
+            labsfile['finished_sims'][i] = 0
+        if labsfile['finished_sims'][i] == 2:
+            labsfile['finished_sims'][i] = 0
 
-    with h5py.File(countspath, 'r+') as cfile:
-        cfile['counts'][labsmask] = np.zeros((len(labsmask),
-                                              cfile['counts'].shape[1],
-                                              cfile['counts'].shape[2]),
-                                             dtype=int)
-        countsmask = (np.sum(np.sum(cfile['counts'],axis=1),axis=1) == 0)
-        countsmask = np.where(countsmask)[0]
+    finished_labels = np.array(labsfile['finished_sims'])
 
-    with h5py.File(labspath, 'r+') as lfile:
-        lfile['finished_sims'][countsmask] = np.zeros((len(countsmask),),
-                                                      dtype=int)
-        done_sims = np.sum(np.array(lfile['finished_sims']) == 1)
-        remaining_sims = lfile['finished_sims'].shape[0] - done_sims
-        statement = "Done with {0} simulations, and {1} simulations remain.".format(done_sims, remaining_sims)
+    # now adjust the "finished" labels in case the counts are filled but
+    # the labels aren't
+    unfilled_labs = np.where(~(finished_labels == finished_counts))[0]
+    for i in unfilled_labs:
+        labsfile['finished_sims'][i] = 1
+
+    labsfile.close()
+
+    num_unfinished = num_total - np.sum(finished_counts)
+
+    statement = "Done with {0} simulations, and {1} simulations remain.".format(np.sum(finished_counts), num_unfinished)
 
     print(statement)
-    return(remaining_sims)
 
 
-def count_unfilled(name, workdir):
-    '''
-    Returns the number of remaining simulations in a database by looking at the 
-    finished_sims dataset in the labels file.
-    '''
-    pass
 
 
-def truncate_db(name, workdir):
-    '''
-    Finds and removed any unfinished runs from the database.
-    '''
-    pass
 
 # def progress_bar(njobs, nfinished, start, message=""):
 #     "prints a progress bar"
