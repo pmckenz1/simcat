@@ -12,9 +12,9 @@ import pandas as pd
 import sqlite3
 
 from simcat.utils import get_snps_count_matrix
-from keras.utils import to_categorical
-from keras.models import load_model
-from keras.utils import Sequence
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.models import load_model
+from tensorflow.keras.utils import Sequence
 
 
 class BatchTrain:
