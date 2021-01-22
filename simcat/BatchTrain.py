@@ -47,6 +47,7 @@ class BatchTrain:
 
         self.model = None
         self.newick = None
+        self.admixture_row = None
 
         self.counts_filepath = os.path.join(directory, input_name+'.counts.h5')
         self.labs_filepath = os.path.join(directory, input_name+'.labels.h5')
@@ -104,6 +105,9 @@ class BatchTrain:
         #countsfile = h5py.File(self.counts_filepath,'r')
         labsfile = h5py.File(self.labs_filepath,'r')
 
+        # the last admixture event is the one we're interested in
+        self.admixture_row = labsfile['admixture'].shape[1] - 1
+
         sister_idxs = get_sister_idxs(toytree.tree(labsfile.attrs['tree']))
         self.newick = labsfile.attrs['tree']
         self.nquarts = labsfile.attrs['nquarts']
@@ -119,12 +123,12 @@ class BatchTrain:
 
         # if exlcuding sisters, which are sisters?
         if self.exclude_sisters:
-            is_sister_bool = np.array([list(scen) in sister_idxs for scen in np.sort(labsfile['admixture'][:,:2].astype(int))])
+            is_sister_bool = np.array([list(scen) in sister_idxs for scen in np.sort(labsfile['admixture'][:, self.admixture_row, :2].astype(int))])
         else:  # otherwise call none of them sisters
             is_sister_bool = np.zeros((num_full_dat),dtype=bool)
 
         # if excluding under a magnitude, which are under that magnitude?
-        exclude_mag_bool = labsfile['admixture'][:,3] < self.exclude_magnitude
+        exclude_mag_bool = labsfile['admixture'][:, self.admixture_row, 3] < self.exclude_magnitude
 
         keeper_idxs_mask = ~(is_unfinished_bool + is_sister_bool + exclude_mag_bool)
 
@@ -158,7 +162,7 @@ class BatchTrain:
         # make one-hot dictionary
         str_categories = []
         for i in all_viable_idxs:
-            str_categories.append(','.join(labsfile['admixture'][i][:2].astype(int).astype(str)))
+            str_categories.append(','.join(labsfile['admixture'][i][self.admixture_row, :2].astype(int).astype(str)))
 
         unique_labs = np.unique(str_categories)
         unique_labs_ints = np.array(range(len(unique_labs))).astype(int)
