@@ -267,7 +267,7 @@ class BatchTrain:
                                                    countsfile,
                                                    n_classes,
                                                    newick,
-                                                   nquarts
+                                                   nquarts,
                                                    batch_size
                                                    )
 
