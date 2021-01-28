@@ -84,15 +84,6 @@ class BatchTrain:
                                  countshape[0],
                                  countshape[1]),
                           dtype=np.int64)
-        #o5.create_dataset('counts',
-        #                  shape=(num_full_dat,
-        #                         countshape[0],
-        #                         countshape[1]),
-        #                  data=np.zeros((num_full_dat,
-        #                                 countshape[0],
-        #                                 countshape[1]),
-        #                                dtype=np.int64)
-        #                  )
 
         con = sqlite3.connect(sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
         cur = con.cursor()
@@ -221,7 +212,6 @@ class BatchTrain:
         self.newick = an_file.attrs['newick']
         self.nquarts = an_file.attrs['nquarts']
 
-
     def write_onehot_file(self):
         '''
         To write a file that contains the one-hot-encoded labels. Optional
@@ -278,7 +268,6 @@ class BatchTrain:
                        epochs=num_epochs,
                        validation_data=validation_batch_generator,
                        validation_steps=validation_batch_generator.__len__())
-
 
         self.model.save(self.model_path)
 
