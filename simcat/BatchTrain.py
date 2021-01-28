@@ -272,12 +272,18 @@ class BatchTrain:
                                                    )
 
         # Train model on dataset
-        self.model.fit_generator(generator=training_batch_generator,
-                                 validation_data=validation_batch_generator,
-                                 use_multiprocessing=True,
-                                 workers=6,
-                                 verbose=1,
-                                 epochs=num_epochs)
+        self.model.fit(training_batch_generator,
+                       steps_per_epoch=training_batch_generator.__len__(),
+                       verbose=1,
+                       epochs=num_epochs,
+                       validation_data=validation_batch_generator,
+                       validation_steps=validation_batch_generator.__len__())
+        #self.model.fit_generator(generator=training_batch_generator,
+        #                         validation_data=validation_batch_generator,
+        #                         use_multiprocessing=True,
+        #                         workers=6,
+        #                         verbose=1,
+        #                         epochs=num_epochs)
 
         #self.model.fit_generator(generator=training_batch_generator,
         #                         steps_per_epoch=int(an_file['training'].shape[0] // batch_size),
@@ -291,6 +297,26 @@ class BatchTrain:
         countsfile.close()
         an_file.close()
 
+
+# Load data
+#def generate_arrays_from_file(path, batchsize):
+#    inputs = []
+#    targets = []
+#    batchcount = 0
+#    while True:
+#        with open(path) as f:
+#            for line in f:
+#                x,y = line.split(',')
+#                inputs.append(x)
+#                targets.append(y)
+#                batchcount += 1
+#                if batchcount > batchsize:
+#                  X = np.array(inputs, dtype='float32')
+#                  y = np.array(targets, dtype='float32')
+#                  yield (X, y)
+#                  inputs = []
+#                  targets = []
+#                  batchcount = 0
 
 class DataGenerator(Sequence):
     'Generates data for Keras'
