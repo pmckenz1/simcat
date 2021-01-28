@@ -278,45 +278,13 @@ class BatchTrain:
                        epochs=num_epochs,
                        validation_data=validation_batch_generator,
                        validation_steps=validation_batch_generator.__len__())
-        #self.model.fit_generator(generator=training_batch_generator,
-        #                         validation_data=validation_batch_generator,
-        #                         use_multiprocessing=True,
-        #                         workers=6,
-        #                         verbose=1,
-        #                         epochs=num_epochs)
 
-        #self.model.fit_generator(generator=training_batch_generator,
-        #                         steps_per_epoch=int(an_file['training'].shape[0] // batch_size),
-        #                         epochs=num_epochs,
-        #                         verbose=1,
-        #                         validation_data=validation_batch_generator,
-        #                         validation_steps=int(an_file['testing'].shape[0] // batch_size))
 
         self.model.save(self.model_path)
 
         countsfile.close()
         an_file.close()
 
-
-# Load data
-#def generate_arrays_from_file(path, batchsize):
-#    inputs = []
-#    targets = []
-#    batchcount = 0
-#    while True:
-#        with open(path) as f:
-#            for line in f:
-#                x,y = line.split(',')
-#                inputs.append(x)
-#                targets.append(y)
-#                batchcount += 1
-#                if batchcount > batchsize:
-#                  X = np.array(inputs, dtype='float32')
-#                  y = np.array(targets, dtype='float32')
-#                  yield (X, y)
-#                  inputs = []
-#                  targets = []
-#                  batchcount = 0
 
 class DataGenerator(Sequence):
     'Generates data for Keras'
@@ -367,14 +335,14 @@ class DataGenerator(Sequence):
         'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
         # Initialization
         y = np.empty((self.batch_size), dtype=int)
-        
+
         X_ = np.array([self.data_file['counts'][_] for _ in list_IDs_temp])
         X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
         for row in range(X.shape[0]):
             X[row] = np.array([get_snps_count_matrix(self.tree, X_[row])])
         X = X.reshape(X.shape[0], -1)
         X = X / X.max()
-        
+
         # Generate data
         for i, ID in enumerate(list_IDs_temp):
             # Store class
