@@ -12,15 +12,16 @@ import h5py
 import numpy as np
 import pandas as pd
 
-from sklearn.manifold import TSNE
-from sklearn.ensemble import ExtraTreesClassifier
-from sklearn.decomposition import NMF, PCA
-from sklearn.model_selection import train_test_split
+#from sklearn.manifold import TSNE
+#from sklearn.ensemble import ExtraTreesClassifier
+##from sklearn.decomposition import NMF, PCA
+#from sklearn.model_selection import train_test_split
 # from sklearn.metrics import confusion_matrix
 
 # try to import multicore-TSNE if available clobbers the scikit version
 try:
-    from MulticoreTSNE import MulticoreTSNE as TSNE
+    #from MulticoreTSNE import MulticoreTSNE as TSNE
+    pass
 except ImportError:
     pass
 
