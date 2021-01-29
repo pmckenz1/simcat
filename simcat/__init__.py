@@ -5,7 +5,8 @@
 from .Database import Database    # BUILDS THE DATABASE OF LABELS
 from .Analysis import Analysis          # POST-SIM ANALYSIS
 from .Simulator import Simulator
-from . import plot                #
+from . import plot
+from .BatchTrain import BatchTrain            #
 # from .Streamer import Streamer  # PULLS FROM DB TO RUN SIMS ON ENGINES
 # from .Model import Model        # DEPRECATED TO SIMCOAL
 # from .Genes import Genes        # DEPRECATED TO SIMCOAL
