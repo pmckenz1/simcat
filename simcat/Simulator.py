@@ -115,7 +115,9 @@ class Simulator:
             finished_sims = i5['finished_sims']
             avail = np.where(~np.array(finished_sims).astype(bool))[0]
             sim_idxs = avail[:nsims]
-            finished_sims[sim_idxs] = 2  # code of 2 indicates that these have started
+            for sim_idx in sim_idxs:
+                finished_sims[sim_idx] = 2
+            #finished_sims[sim_idxs] = 2  # code of 2 indicates that these have started
         labslock.release()
         # an iterator to return chunked slices of jobs
         jobs = range(0, nsims, self.chunksize)
@@ -194,7 +196,8 @@ class Simulator:
                              timeout=60)
             with h5py.File(self.labels, 'r+') as i5:
                 finished_sims = i5['finished_sims']
-                finished_sims[sim_idxs] = 1
+                for sim_idx in sim_idxs:
+                    finished_sims[sim_idx] = 1
             labslock.release()
 
             # on success: close the progress counter
@@ -287,7 +290,7 @@ class IPCoalWrapper:
             self.node_Nes = io5["node_Nes"][self.idxs, ...]
             self.admixture = io5["admixture"][self.idxs, ...]
             self.treeheight = io5["treeheight"][self.idxs, ...]
-            self.slide_seeds = io5["slide_seeds"][self.idxs]
+            self.slide_seeds = io5["slide_seeds"][self.idxs,...]
 
             # attribute metadata
             self.tree = toytree.tree(io5.attrs["tree"])

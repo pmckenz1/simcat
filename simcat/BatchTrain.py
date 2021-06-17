@@ -274,6 +274,25 @@ class BatchTrain:
         countsfile.close()
         an_file.close()
 
+    def pass_alignment_to_model(self,alignment,return_probs = False):
+        tree = toytree.tree(self.newick)
+
+        x = np.array([get_snps_count_matrix(tree, alignment)])
+        x = x.reshape(x.shape[0], -1)
+        x = x/x.max()
+
+        prediction_probs = self.model.predict(x)
+        if return_probs:
+            return(prediction_probs)
+
+        max_prob_idx = np.argmax(prediction_probs)
+
+        oh_dict = pd.read_csv(self.onehot_dict_path).T
+
+        answer = oh_dict[1][oh_dict[0].eq(str(max_prob_idx))][0]
+
+        return(answer)
+
 
 class DataGenerator(Sequence):
     'Generates data for Keras'
@@ -330,7 +349,10 @@ class DataGenerator(Sequence):
         for row in range(X.shape[0]):
             X[row] = np.array([get_snps_count_matrix(self.tree, X_[row])])
         X = X.reshape(X.shape[0], -1)
-        X = X / X.max()
+        maxes_vector = np.max(X, axis=1) # finds max of each row
+        # dividing each row by its max, slicing per: 
+        # https://stackoverflow.com/questions/19602187/numpy-divide-each-row-by-a-vector-element
+        X = X / maxes_vector[:, None]
 
         # Generate data
         for i, ID in enumerate(list_IDs_temp):
@@ -338,6 +360,8 @@ class DataGenerator(Sequence):
             y[i] = self.labels[ID]
 
         return X, to_categorical(y, num_classes=self.n_classes)
+
+
 
 
 def get_sister_idxs(tre):
