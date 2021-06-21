@@ -1,6 +1,6 @@
 # simcat
 
-Machine learning for inferring introgressive edges. Given an input species tree, *simcat* automates the simulation of a SNP data training database and simplifies the process of training a neural network on that data and applying it to empirical SNP data.
+Machine learning for inferring ancient introgression on a species tree. Given an input species tree, *simcat* automates the simulation of a SNP data training database and simplifies the process of training a neural network on that data and applying it to empirical SNP data.
 
 See simcat_tutorial.ipynb in the "notebooks" folder for a walkthrough.  
 
