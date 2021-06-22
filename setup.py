@@ -27,6 +27,7 @@ setup(
         "h5py",
         "ipyparallel",
         "ipywidgets",
+        "fasteners",
         # "numba",
         # "numpy",
         # "scipy",
