@@ -340,14 +340,18 @@ class IPCoalWrapper:
                 ))
 
             # define the model if there is one...
-            gtr = ms.GTR(self.rate_vector, self.pi_vector)
+            if self.rate_vector and self.pi_vector:
+                subst_model = ms.GTR(self.rate_vector, self.pi_vector)
+            else:
+                subst_model = 'JC69'
+
 
             # build ipcoal Model object
             model = ipcoal.Model(
                 tree=tree,
                 admixture_edges=admix,
                 Ne=None,
-                subst_model=gtr,
+                subst_model=subst_model,
                 )
 
             # simulate genealogies and snps
