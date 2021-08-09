@@ -322,7 +322,7 @@ class IPCoalWrapper:
                 prop=self.node_slide_prop, seed=self.slide_seeds[idx])
 
             # set Nes default and override on internal nodes with stored vals
-            tree = tree.set_node_values("Ne", default=1e5)
+            tree = tree.set_node_data("Ne", default=1e5)
             nes = iter(self.node_Nes[idx])
             for node in tree.treenode.traverse():
                 #if not node.is_leaf():
