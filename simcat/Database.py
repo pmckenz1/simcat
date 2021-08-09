@@ -134,6 +134,8 @@ class Database:
         admix_edge_max=0.5,
         exclude_sisters=False,
         node_slide_prop=0.25,
+        rate_vector=None,
+        pi_vector=None,
         seed=None,
         force=False,
         quiet=False,
@@ -183,6 +185,8 @@ class Database:
         self.admix_prop_min = admix_prop_min
         self.admix_prop_max = admix_prop_max
         self.exclude_sisters = exclude_sisters
+        self.rate_vector = rate_vector
+        self.pi_vector = pi_vector
         # vary the height!
         self.heightmax = self.tree.treenode.height * 1.5
         self.heightmin = self.tree.treenode.height * 0.5
@@ -289,6 +293,10 @@ class Database:
         o5.attrs["ntips"] = self.tree.ntips
         i5.attrs["node_slide_prop"] = self.node_slide_prop
         o5.attrs["node_slide_prop"] = self.node_slide_prop
+        i5.attrs["rate_vector"] = self.rate_vector
+        o5.attrs["rate_vector"] = self.rate_vector
+        i5.attrs["pi_vector"] = self.pi_vector
+        o5.attrs["pi_vector"] = self.pi_vector
 
         # store data in separate dsets and with matrix shape so that in the 
         # analysis we can best take advantage of different combinations of the

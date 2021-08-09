@@ -10,6 +10,7 @@ from builtins import range
 
 import h5py
 import ipcoal
+import msprime as ms
 import os
 import toytree
 import time
@@ -296,6 +297,8 @@ class IPCoalWrapper:
             self.tree = toytree.tree(io5.attrs["tree"])
             self.tree = self.tree.mod.make_ultrametric()  # imprecision
             self.nsnps = io5.attrs["nsnps"]
+            self.rate_vector = io5.attrs["rate_vector"]
+            self.pi_vector = io5.attrs["pi_vector"]
             self.ntips = len(self.tree)
             self.node_slide_prop = io5.attrs["node_slide_prop"]
 
@@ -336,11 +339,15 @@ class IPCoalWrapper:
                     ad[3],
                 ))
 
+            # define the model if there is one...
+            gtr = ms.GTR(self.rate_vector, self.pi_vector)
+
             # build ipcoal Model object
             model = ipcoal.Model(
                 tree=tree,
                 admixture_edges=admix,
                 Ne=None,
+                subst_model=gtr,
                 )
 
             # simulate genealogies and snps
