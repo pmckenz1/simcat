@@ -340,7 +340,7 @@ class IPCoalWrapper:
                 ))
 
             # define the model if there is one...
-            if self.rate_vector and self.pi_vector:
+            if self.rate_vector is not None:
                 subst_model = ms.GTR(self.rate_vector, self.pi_vector)
             else:
                 subst_model = 'JC69'
