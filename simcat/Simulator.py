@@ -291,7 +291,7 @@ class IPCoalWrapper:
             self.node_Nes = io5["node_Nes"][self.idxs, ...]
             self.admixture = io5["admixture"][self.idxs, ...]
             self.treeheight = io5["treeheight"][self.idxs, ...]
-            self.slide_seeds = io5["slide_seeds"][self.idxs,...]
+            self.slide_seeds = io5["slide_seeds"][self.idxs, ...]
 
             # attribute metadata
             self.tree = toytree.tree(io5.attrs["tree"])
@@ -318,7 +318,7 @@ class IPCoalWrapper:
             tree = self.tree.mod.node_scale_root_height(treeheight=self.treeheight[idx])
 
             # node slide
-            tree = self.tree.mod.node_slider(
+            tree = tree.mod.node_slider(
                 prop=self.node_slide_prop, seed=self.slide_seeds[idx])
 
             # set Nes default and override on internal nodes with stored vals
