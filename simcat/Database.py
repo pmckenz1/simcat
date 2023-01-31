@@ -170,7 +170,7 @@ class Database:
         # deal with imprecision issues by writing the newick and then converting
         # to ultrametric
         self.tree = toytree.tree(self.tree.write())
-        self.tree = self.tree.mod.make_ultrametric()
+        self.tree = self.tree.mod.edges_extend_tips_to_align()
         
         self.existing_admix_edges = existing_admix_edges
         self.Ne_min = Ne_min
@@ -371,9 +371,7 @@ class Database:
                                          )
 
             # store internal heights and Nes to array
-            heights = ntree.get_node_values("height", 1, 1).astype(int)
-            mask = heights > 0
-            iheights = heights[mask]
+            heights = ntree.get_node_data("height")[(ntree.ntips):].astype(int)
             # ipops = popsizes[mask]
 
             # get n admixture edges (on this slide tree)
@@ -390,7 +388,7 @@ class Database:
 #            # iterate over each placement of the edges
 #            for edgetup in aedges:
 
-            arr_h[idx] = iheights
+            arr_h[idx] = heights
             arr_n[idx] = popsizes
             for aidx, exedge in enumerate(self.existing_admix_edges):
                 arr_a[idx, aidx] = (exedge[0], exedge[1],
