@@ -295,7 +295,7 @@ class IPCoalWrapper:
 
             # attribute metadata
             self.tree = toytree.tree(io5.attrs["tree"])
-            self.tree = self.tree.mod.make_ultrametric()  # imprecision
+            self.tree = self.tree.mod.edges_extend_tips_to_align()  # imprecision
             self.nsnps = io5.attrs["nsnps"]
             self.rate_vector = io5.attrs["rate_vector"]
             self.pi_vector = io5.attrs["pi_vector"]
@@ -315,10 +315,10 @@ class IPCoalWrapper:
         # run simulations
         for idx in range(self.nvalues):
             # shift root height
-            tree = self.tree.mod.node_scale_root_height(treeheight=self.treeheight[idx])
+            tree = self.tree.mod.edges_scale_to_root_height(treeheight=self.treeheight[idx])
 
             # node slide
-            tree = tree.mod.node_slider(
+            tree = tree.mod.edges_slider(
                 prop=self.node_slide_prop, seed=self.slide_seeds[idx])
 
             # set Nes default and override on internal nodes with stored vals
