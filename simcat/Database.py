@@ -356,7 +356,7 @@ class Database:
             newheight = np.random.uniform(self.heightmin, self.heightmax)
 
             # make it taller! ...or shorter...
-            ntree = self.tree.mod.node_scale_root_height(treeheight=newheight)
+            ntree = self.tree.mod.edges_scale_to_root_height(treeheight=newheight)
 
             # wiggle node heights
             prop = self.node_slide_prop
