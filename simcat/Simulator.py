@@ -299,7 +299,7 @@ class IPCoalWrapper:
             self.nsnps = io5.attrs["nsnps"]
             self.rate_vector = io5.attrs["rate_vector"]
             self.pi_vector = io5.attrs["pi_vector"]
-            self.ntips = len(self.tree)
+            self.ntips = self.tree.ntips
             self.node_slide_prop = io5.attrs["node_slide_prop"]
 
             # store aligned SNPs
