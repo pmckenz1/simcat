@@ -232,8 +232,7 @@ class BatchTrain:
     def train(self,
               batch_size,
               num_epochs,
-              workers=4,
-              return_data=False):
+              workers=4):
         countsfile = h5py.File(self.counts_filepath, 'r')
         an_file = h5py.File(self.analysis_filepath, 'r')
 
@@ -261,8 +260,7 @@ class BatchTrain:
                                                    nquarts,
                                                    batch_size
                                                    )
-        if return_data:
-            return(training_batch_generator,validation_batch_generator)
+
         # Train model on dataset
         self.model.fit(training_batch_generator,
                        steps_per_epoch=training_batch_generator.__len__(),
@@ -364,7 +362,29 @@ class DataGenerator(Sequence):
         return X, to_categorical(y, num_classes=self.n_classes)
 
 
+    def get_data(self,
+        batch_idxs # list of indices you want to pull data from
+        ):
+        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
+        # Initialization
+        y = np.empty((len(batch_idxs)), dtype=int)
 
+        X_ = np.array([self.data_file['counts'][_] for _ in list_IDs_temp])
+        X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
+        for row in range(X.shape[0]):
+            X[row] = np.array([get_snps_count_matrix(self.tree, X_[row])])
+        #X = X.reshape(X.shape[0], -1)
+        #maxes_vector = np.max(X, axis=1) # finds max of each row
+        # dividing each row by its max, slicing per: 
+        # https://stackoverflow.com/questions/19602187/numpy-divide-each-row-by-a-vector-element
+        #X = X / maxes_vector[:, None]
+
+        # Generate data
+        for i, ID in enumerate(list_IDs_temp):
+            # Store class
+            y[i] = self.labels[ID]
+
+        return X, to_categorical(y, num_classes=self.n_classes)
 
 def get_sister_idxs(tre):
     sisters = []
