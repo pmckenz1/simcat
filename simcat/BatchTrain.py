@@ -92,8 +92,9 @@ class BatchTrain:
         for simulation_number in range(num_full_dat):
             cur.execute("select arr from counts where id={}".format(simulation_number))
             data = cur.fetchone()
-            converted = convert_array(data[0])
-            o5['counts'][simulation_number] = converted
+            o5['counts'][simulation_number] = data[0]
+            #converted = convert_array(data[0])
+            #o5['counts'][simulation_number] = converted
 
         con.close()
         o5.close()
