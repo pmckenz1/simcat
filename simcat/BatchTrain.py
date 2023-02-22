@@ -274,24 +274,59 @@ class BatchTrain:
         countsfile.close()
         an_file.close()
 
-    def pass_alignment_to_model(self,alignment,return_probs = False):
-        tree = toytree.tree(self.newick)
+#    def pass_alignment_to_model(self,alignment,return_probs = False):
+#        tree = toytree.tree(self.newick)
+#
+#        x = np.array([get_snps_count_matrix(tree, alignment)])
+#        x = x.reshape(x.shape[0], -1)
+#        x = x/x.max()
+#
+#        prediction_probs = self.model.predict(x)
+#        if return_probs:
+#            return(prediction_probs)
+#
+#        max_prob_idx = np.argmax(prediction_probs)
+#
+#        oh_dict = pd.read_csv(self.onehot_dict_path).T
+#
+#        answer = oh_dict[1][oh_dict[0].eq(str(max_prob_idx))][0]
+#
+#        return(answer)
 
-        x = np.array([get_snps_count_matrix(tree, alignment)])
-        x = x.reshape(x.shape[0], -1)
-        x = x/x.max()
+    def get_data(self,
+        batch_idxs # list of indices you want to pull data from
+        ):
 
-        prediction_probs = self.model.predict(x)
-        if return_probs:
-            return(prediction_probs)
+        countsfile = h5py.File(self.counts_filepath, 'r')
+        an_file = h5py.File(self.analysis_filepath, 'r')
 
-        max_prob_idx = np.argmax(prediction_probs)
+        n_classes = an_file.attrs['num_classes']
 
-        oh_dict = pd.read_csv(self.onehot_dict_path).T
+        labels = dict(zip(an_file['labels'][:, 0], an_file['labels'][:, 1]))
 
-        answer = oh_dict[1][oh_dict[0].eq(str(max_prob_idx))][0]
+        newick = an_file.attrs['newick']
 
-        return(answer)
+        tree = toytree.tree(newick)
+
+        # Initialization
+        y = np.empty((len(batch_idxs)), dtype=int)
+
+        X_ = np.array([countsfile['counts'][_] for _ in batch_idxs])
+        X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
+        for row in range(X.shape[0]):
+            X[row] = np.array([get_snps_count_matrix(tree, X_[row])])
+        #X = X.reshape(X.shape[0], -1)
+        #maxes_vector = np.max(X, axis=1) # finds max of each row
+        # dividing each row by its max, slicing per: 
+        # https://stackoverflow.com/questions/19602187/numpy-divide-each-row-by-a-vector-element
+        #X = X / maxes_vector[:, None]
+
+        # Generate data
+        for i, ID in enumerate(batch_idxs):
+            # Store class
+            y[i] = labels[ID]
+
+        return X, to_categorical(y, num_classes=n_classes)
 
 
 class DataGenerator(Sequence):
@@ -361,30 +396,6 @@ class DataGenerator(Sequence):
 
         return X, to_categorical(y, num_classes=self.n_classes)
 
-
-    def get_data(self,
-        batch_idxs # list of indices you want to pull data from
-        ):
-        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
-        # Initialization
-        y = np.empty((len(batch_idxs)), dtype=int)
-
-        X_ = np.array([self.data_file['counts'][_] for _ in list_IDs_temp])
-        X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
-        for row in range(X.shape[0]):
-            X[row] = np.array([get_snps_count_matrix(self.tree, X_[row])])
-        #X = X.reshape(X.shape[0], -1)
-        #maxes_vector = np.max(X, axis=1) # finds max of each row
-        # dividing each row by its max, slicing per: 
-        # https://stackoverflow.com/questions/19602187/numpy-divide-each-row-by-a-vector-element
-        #X = X / maxes_vector[:, None]
-
-        # Generate data
-        for i, ID in enumerate(list_IDs_temp):
-            # Store class
-            y[i] = self.labels[ID]
-
-        return X, to_categorical(y, num_classes=self.n_classes)
 
 def get_sister_idxs(tre):
     sisters = []
