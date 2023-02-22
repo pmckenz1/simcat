@@ -91,7 +91,8 @@ class BatchTrain:
         for simulation_number in range(num_full_dat):
             cur.execute("select arr from counts where id={}".format(simulation_number))
             data = cur.fetchone()
-            o5['counts'][simulation_number] = data[0]
+            converted = convert_array(data[0])
+            o5['counts'][simulation_number] = converted
 
         con.close()
         o5.close()
@@ -326,6 +327,9 @@ class BatchTrain:
             # Store class
             y[i] = labels[ID]
 
+        countsfile.close()
+        an_file.close()
+
         return X, to_categorical(y, num_classes=n_classes)
 
 
@@ -396,6 +400,10 @@ class DataGenerator(Sequence):
 
         return X, to_categorical(y, num_classes=self.n_classes)
 
+def convert_array(text):
+    out = io.BytesIO(text)
+    out.seek(0)
+    return np.load(out)
 
 def get_sister_idxs(tre):
     sisters = []
