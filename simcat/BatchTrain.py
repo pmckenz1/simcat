@@ -10,6 +10,7 @@ import os
 import toytree
 import pandas as pd
 import sqlite3
+import io
 
 from simcat.utils import get_snps_count_matrix
 from tensorflow.keras.utils import to_categorical
