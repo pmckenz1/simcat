@@ -232,7 +232,8 @@ class BatchTrain:
     def train(self,
               batch_size,
               num_epochs,
-              workers=4):
+              workers=4,
+              return_data=False):
         countsfile = h5py.File(self.counts_filepath, 'r')
         an_file = h5py.File(self.analysis_filepath, 'r')
 
@@ -260,7 +261,8 @@ class BatchTrain:
                                                    nquarts,
                                                    batch_size
                                                    )
-
+        if return_data:
+            return(training_batch_generator,validation_batch_generator)
         # Train model on dataset
         self.model.fit(training_batch_generator,
                        steps_per_epoch=training_batch_generator.__len__(),
