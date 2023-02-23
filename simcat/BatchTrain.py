@@ -376,7 +376,12 @@ class DataGenerator(Sequence):
 
         #yield ({'input_1': x1, 'input_2': x2}, {'output': y})
 
-        return X, y
+        #return X, y
+
+        Xdict = {'input_'+str(i+1): X[0][:,i,:] for i in range(self.nquarts)}
+        ydict = {'outputs': y}
+
+        return(Xdict,ydict)
 
     def on_epoch_end(self):
         'Updates indexes after each epoch'
