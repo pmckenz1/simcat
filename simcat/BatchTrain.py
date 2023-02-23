@@ -379,7 +379,7 @@ class DataGenerator(Sequence):
         #return X, y
 
         Xdict = {'input_'+str(i+1): X[:,i,:] for i in range(self.nquarts)}
-        ydict = {'outputs': y}
+        ydict = y
 
         return(Xdict,ydict)
 
