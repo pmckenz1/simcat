@@ -372,7 +372,11 @@ class DataGenerator(Sequence):
         # Generate data
         X, y = self.__data_generation(list_IDs_temp)
 
-        return tuple(X), y
+        #inputdict = {}
+
+        #yield ({'input_1': x1, 'input_2': x2}, {'output': y})
+
+        return X, y
 
     def on_epoch_end(self):
         'Updates indexes after each epoch'
