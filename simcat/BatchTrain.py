@@ -378,7 +378,7 @@ class DataGenerator(Sequence):
 
         #return X, y
 
-        Xdict = {'input_'+str(i+1): X[0][:,i,:] for i in range(self.nquarts)}
+        Xdict = {'input_'+str(i+1): X[:,i,:] for i in range(self.nquarts)}
         ydict = {'outputs': y}
 
         return(Xdict,ydict)
