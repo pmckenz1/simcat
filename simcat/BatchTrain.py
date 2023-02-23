@@ -389,11 +389,25 @@ class DataGenerator(Sequence):
         X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
         for row in range(X.shape[0]):
             X[row] = np.array([get_snps_count_matrix(self.tree, X_[row])])
-        X = X.reshape(X.shape[0], -1)
-        maxes_vector = np.max(X, axis=1) # finds max of each row
+
+        # squash all quartets into one giant row?? Next five lines:
+        #X = X.reshape(X.shape[0], -1)
+        #maxes_vector = np.max(X, axis=1) # finds max of each row
         # dividing each row by its max, slicing per: 
         # https://stackoverflow.com/questions/19602187/numpy-divide-each-row-by-a-vector-element
-        X = X / maxes_vector[:, None]
+        #X = X / maxes_vector[:, None]
+
+        # not squashing quartets -- but instead having nquartets by 16*16 inputs (so each quartet is separate,
+        # but a row of 256 cells):
+        X = X.reshape(X.shape[0],X.shape[1],-1)
+
+        # divide each full replicate by overall max?
+        #for repidx in range(X.shape[0]):
+        #    X[repidx] = X[repidx]/np.max(X[repidx]) # normalizing all quartets by one max val
+
+        # or divide each individual quartet by its max?
+        for repidx in range(X.shape[0]):
+            X[repidx] = X[repidx]/(np.max(X,axis=2)[repidx][:,np.newaxis]) # normalizing each quartet individually
 
         # Generate data
         for i, ID in enumerate(list_IDs_temp):
