@@ -291,14 +291,16 @@ class BatchTrain:
                                                    )
 
         # Train model on dataset
-        self.model.fit(training_batch_generator,
-                       steps_per_epoch=training_batch_generator.__len__(),
-                       verbose=1,
-                       epochs=num_epochs,
-                       validation_data=validation_batch_generator,
-                       validation_steps=validation_batch_generator.__len__())
+        for epoch_idx in range(num_epochs):
+            self.model.fit(training_batch_generator,
+                           steps_per_epoch=training_batch_generator.__len__(),
+                           verbose=1,
+                           epochs=1,
+                           validation_data=validation_batch_generator,
+                           validation_steps=validation_batch_generator.__len__(),
+                           workers=workers)
 
-        self.model.save(self.model_path)
+            self.model.save(self.model_path)
 
         countsfile.close()
         an_file.close()
