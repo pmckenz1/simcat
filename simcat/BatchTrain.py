@@ -215,22 +215,45 @@ class BatchTrain:
         self.newick = an_file.attrs['newick']
         self.nquarts = an_file.attrs['nquarts']
 
-    def write_onehot_file(self):
-        '''
-        To write a file that contains the one-hot-encoded labels. Optional
-        because this might take lots of space.
-        '''
-        pass
-
-    def init_model(self,model):
-        self.model = model
-        self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
-        model.save(self.model_path)
-        print("New neural network saved to " + self.model_path)
+#    def init_model(self,
+#        nnodes_per_quart=8,
+#        ):
+#        # define the model -- this could putentially be tuned by user
+#        quart_inputs = [Input(shape=(16*16,)) for quartidx in range(self.nquarts)]
+#        x = [Dense(nnodes_per_quart, activation="relu")(quart) for quart in quart_inputs]
+#        combined = concatenate(x)
+#        z = Dense(self.num_classes, activation='softmax')(combined)
+#
+#        model = Model(inputs=quart_inputs,outputs=z)
+#
+#        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+#
+#        self.model = model
+#        self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
+#        model.save(self.model_path)
+#        print("New neural network saved to " + self.model_path)
 
     def load_model(self):
         self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
-        self.model = load_model(self.model_path)
+        if not os.path.exists(self.model_path):
+            nnodes_per_quart = 8 # this can be tuned by user in the future?
+            # define the model -- this could putentially be tuned by user
+            quart_inputs = [Input(shape=(16*16,)) for quartidx in range(self.nquarts)]
+            x = [Dense(nnodes_per_quart, activation="relu")(quart) for quart in quart_inputs]
+            combined = concatenate(x)
+            z = Dense(self.num_classes, activation='softmax')(combined)
+
+            model = Model(inputs=quart_inputs,outputs=z)
+
+            model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+            self.model = model
+
+            model.save(self.model_path)
+            print("New neural network saved to: " + self.model_path)
+        else:
+            print("Loading existing neural network: " + self.model_path)
+            self.model = load_model(self.model_path)
 
     def train(self,
               batch_size,
