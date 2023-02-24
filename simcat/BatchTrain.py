@@ -262,7 +262,7 @@ class BatchTrain:
               batch_size,
               num_epochs,
               workers=4):
-        countsfile = h5py.File(self.counts_filepath, 'r')
+        #countsfile = h5py.File(self.counts_filepath, 'r')
         an_file = h5py.File(self.analysis_filepath, 'r')
 
         n_classes = an_file.attrs['num_classes']
@@ -272,9 +272,15 @@ class BatchTrain:
         newick = an_file.attrs['newick']
         nquarts = an_file.attrs['nquarts']
 
+        sql_path = os.path.join(self.directory, self.input_name+'.counts.db')
+        # get the alignment shape
+        con = sqlite3.connect(sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        cur = con.cursor()
+
         training_batch_generator = DataGenerator(np.array(an_file['training']),
                                                  labels,
-                                                 countsfile,
+                                                 cur,
+                                                 #countsfile,
                                                  n_classes,
                                                  newick,
                                                  nquarts,
@@ -283,7 +289,8 @@ class BatchTrain:
 
         validation_batch_generator = DataGenerator(np.array(an_file['testing']),
                                                    labels,
-                                                   countsfile,
+                                                   cur,
+                                                   #countsfile,
                                                    n_classes,
                                                    newick,
                                                    nquarts,
@@ -302,7 +309,8 @@ class BatchTrain:
 
             self.model.save(self.model_path)
 
-        countsfile.close()
+        con.close()
+        #countsfile.close()
         an_file.close()
 
 #    def pass_alignment_to_model(self,alignment,return_probs = False):
@@ -368,7 +376,8 @@ class DataGenerator(Sequence):
     def __init__(self,
                  list_IDs,
                  labels,
-                 data_file,
+                 #data_file,
+                 cur,
                  n_classes,
                  newick,
                  nquarts,
@@ -377,7 +386,8 @@ class DataGenerator(Sequence):
         'Initialization'
         self.batch_size = batch_size
         self.labels = labels
-        self.data_file = data_file
+        #self.data_file = data_file
+        self.cur = cur
         self.tree = toytree.tree(newick)
         self.nquarts = nquarts
         self.list_IDs = list_IDs
@@ -422,7 +432,12 @@ class DataGenerator(Sequence):
         # Initialization
         y = np.empty((self.batch_size), dtype=int)
 
-        X_ = np.array([self.data_file['counts'][_] for _ in list_IDs_temp])
+        ###########
+        #X_ = np.array([self.data_file['counts'][_] for _ in list_IDs_temp])
+        ############
+        # grab rows from sql database
+        X_ = np.array([self.cur.execute("select arr from counts where id={}".format(_)).fetchone() for _ in list_IDs_temp])
+        ############
         X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
         for row in range(X.shape[0]):
             X[row] = np.array([get_snps_count_matrix(self.tree, X_[row])])
