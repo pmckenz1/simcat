@@ -60,12 +60,9 @@ class BatchTrain:
                 print("hdf5 counts file does not yet exist. Converting SQL database to hdf5...")
                 self.write_sql_counts_to_h5()
 
-        if not self.exists:
-            self.analysis_filepath = os.path.join(self.directory,self.output_name+'.analysis.h5')
-            if not os.path.exists(self.analysis_filepath):
-                self.write_ref_files()
-            else:
-                self.load()
+        self.analysis_filepath = os.path.join(self.directory,self.output_name+'.analysis.h5')
+        if not os.path.exists(self.analysis_filepath):
+            self.write_ref_files()
         else:
             self.load()
 
