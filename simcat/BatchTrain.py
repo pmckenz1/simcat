@@ -437,7 +437,7 @@ class DataGenerator(Sequence):
         ############
         # grab rows from sql database
         X_ = np.array([self.cur.execute("select arr from counts where id={}".format(_)).fetchone() for _ in list_IDs_temp])
-        X_.reshape(X_.shape[0],X_.shape[2],X_.shape[3])
+        X_ = X_.reshape(X_.shape[0],X_.shape[2],X_.shape[3])
         ############
         X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
         for row in range(X.shape[0]):
