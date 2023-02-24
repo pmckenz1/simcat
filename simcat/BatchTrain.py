@@ -391,6 +391,7 @@ class DataGenerator(Sequence):
         self.list_IDs = list_IDs
         self.n_classes = n_classes
         self.shuffle = shuffle
+        self.con = sqlite3.connect(self.sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
         self.on_epoch_end()
 
     def __len__(self):
@@ -434,11 +435,11 @@ class DataGenerator(Sequence):
         #X_ = np.array([self.data_file['counts'][_] for _ in list_IDs_temp])
         ############
         # grab rows from sql database
-        con = sqlite3.connect(self.sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
-        cur = con.cursor()
+        #con = sqlite3.connect(self.sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        cur = self.con.cursor()
         X_ = np.array([cur.execute("select arr from counts where id={}".format(_)).fetchone() for _ in list_IDs_temp])
         X_ = X_.reshape(X_.shape[0],X_.shape[2],X_.shape[3])
-        con.close()
+        #con.close()
         ############
         X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
         for row in range(X.shape[0]):
