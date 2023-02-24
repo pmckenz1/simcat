@@ -16,6 +16,8 @@ from simcat.utils import get_snps_count_matrix
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.models import load_model
 from tensorflow.keras.utils import Sequence
+from tensorflow.keras.layers import Dense, concatenate
+from tensorflow.keras import Input, Model
 
 
 class BatchTrain:
@@ -59,7 +61,11 @@ class BatchTrain:
                 self.write_sql_counts_to_h5()
 
         if not self.exists:
-            self.write_ref_files()
+            self.analysis_filepath = os.path.join(self.directory,self.output_name+'.analysis.h5')
+            if not os.path.exists(self.analysis_filepath):
+                self.write_ref_files()
+            else:
+                self.load()
         else:
             self.load()
 
@@ -165,7 +171,7 @@ class BatchTrain:
         self.num_classes = len(unique_labs)
         an_file.attrs['num_classes'] = self.num_classes
 
-        self.input_shape = self.nquarts * 16 * 16
+        self.input_shape = (self.nquarts, 16 * 16)
         an_file.attrs['input_shape'] = self.input_shape
 
         self.onehot_dict_path = os.path.join(self.directory,self.output_name+'.onehot_dict.csv')
