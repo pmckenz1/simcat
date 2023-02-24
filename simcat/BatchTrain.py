@@ -435,7 +435,7 @@ class DataGenerator(Sequence):
         ############
         # grab rows from sql database
         con = sqlite3.connect(self.sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
-        cur = self.con.cursor()
+        cur = con.cursor()
         X_ = np.array([cur.execute("select arr from counts where id={}".format(_)).fetchone() for _ in list_IDs_temp])
         X_ = X_.reshape(X_.shape[0],X_.shape[2],X_.shape[3])
         con.close()
