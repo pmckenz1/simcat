@@ -374,7 +374,7 @@ class BatchTrain:
         (This order is alphabetical from tip names)
         '''
         # format in quartet matrices
-        mat = np.array([get_snps_count_matrix(self.tree, alignment)])
+        mat = np.array([get_snps_count_matrix(toytree.tree(self.newick), alignment)])
         # reshape it to combine the 16x16 part
         mat = mat.reshape(mat.shape[0],1,-1)
         mat = mat / np.max(mat,axis=2)[:,np.newaxis]
