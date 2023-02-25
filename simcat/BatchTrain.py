@@ -367,6 +367,37 @@ class BatchTrain:
 
         return X, to_categorical(y, num_classes=n_classes)
 
+    def _format_alignment_for_model(self, alignment):
+        '''
+        Formatting an alignment of unlinked SNP data for neural net
+        Alignment rows MUST match the order in the simcat database (ie from the tree)
+        (This order is alphabetical from tip names)
+        '''
+        # format in quartet matrices
+        mat = np.array([get_snps_count_matrix(self.tree, alignment)])
+        # reshape it to combine the 16x16 part
+        mat = mat.reshape(mat.shape[0],1,-1)
+        mat = mat / np.max(mat,axis=2)[:,np.newaxis]
+        # make a dictionary giving each separate quartet matrix an input name
+        # and reshaping it the way keras likes (ie with a row dimension)
+        counts_dict = {"input_" + str(quart+1): mat[quart] for quart in range(len(mat))}
+        return(counts_dict)
+
+    def predict_from_alignment(self, alignment):
+        # format the alignment for the model
+        count_dict = self.format_alignment_for_model(alignment)
+
+        # load in the onehot dictionary linking model vals to understandable vals
+        # the understandable vals are always in numerical indexed order, 0 to max categories
+        onehot = pd.read_csv(self.onehot_dict_path)
+
+        # make the prediction
+        pred = self.model.predict(count_dict)
+
+        # align with categories in a DataFrame
+        pred_df = pd.DataFrame([pred[0]],columns=onehot.loc[1])
+        return(pred_df)
+
 
 class DataGenerator(Sequence):
     'Generates data for Keras'
@@ -470,7 +501,11 @@ class DataGenerator(Sequence):
 
         return X, to_categorical(y, num_classes=self.n_classes)
 
+
 def convert_array(text):
+    '''
+    converts bytes array in sql db to numpy
+    '''
     out = io.BytesIO(text)
     out.seek(0)
     return np.load(out)
