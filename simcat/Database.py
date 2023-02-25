@@ -360,7 +360,7 @@ class Database:
 
             # wiggle node heights
             prop = self.node_slide_prop
-            slide_seed = self.random.randint(0, 1e12)
+            slide_seed = self.random.randint(0, 2**32)
             ntree = ntree.mod.edges_slider(prop=prop, seed=slide_seed)
 
             # this generates node-specific random Ne values for each sampled Ne
