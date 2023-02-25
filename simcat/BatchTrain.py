@@ -385,7 +385,7 @@ class BatchTrain:
 
     def predict_from_alignment(self, alignment):
         # format the alignment for the model
-        count_dict = self.format_alignment_for_model(alignment)
+        count_dict = self._format_alignment_for_model(alignment)
 
         # load in the onehot dictionary linking model vals to understandable vals
         # the understandable vals are always in numerical indexed order, 0 to max categories
