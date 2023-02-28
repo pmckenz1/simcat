@@ -16,7 +16,7 @@ from simcat.utils import get_snps_count_matrix
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.models import load_model
 from tensorflow.keras.utils import Sequence
-from tensorflow.keras.layers import Dense, concatenate
+from tensorflow.keras.layers import Dense, Dropout, concatenate
 from tensorflow.keras import Input, Model
 
 
@@ -243,6 +243,8 @@ class BatchTrain:
             # define the model -- this could putentially be tuned by user
             quart_inputs = [Input(shape=(16*16,)) for quartidx in range(self.nquarts)]
             x = [Dense(nnodes_per_quart, activation="relu")(quart) for quart in quart_inputs]
+            # add dropout to each input
+            x = [Dropout(0.5)(i) for i in x]
             combined = concatenate(x)
             z = Dense(self.num_classes, activation='softmax')(combined)
 
