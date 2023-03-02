@@ -239,9 +239,10 @@ class BatchTrain:
     def init_model(self,
         dropout=True,
         extra_layer=False,
+        force=False
         ):
         self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
-        if not os.path.exists(self.model_path):
+        if not os.path.exists(self.model_path) or force:
             nnodes_per_quart = 8 # this can be tuned by user in the future?
             # define the model -- this could putentially be tuned by user
             quart_inputs = [Input(shape=(16*16,)) for quartidx in range(self.nquarts)]
@@ -251,7 +252,7 @@ class BatchTrain:
                 x = [Dropout(0.5)(i) for i in x]
             combined = concatenate(x)
             if extra_layer:
-                combined = Dense(self.num_classes,activation='relu')(combined) # as many nodes as outputs here - arbitrary
+                combined = Dense(self.num_classes,activation='relu')(combined) # as many nodes as outputs here - arbitraryBa
                 if dropout:
                     combined = Dropout(0.5)(combined)
             z = Dense(self.num_classes, activation='softmax')(combined)
