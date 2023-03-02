@@ -236,16 +236,24 @@ class BatchTrain:
 #        model.save(self.model_path)
 #        print("New neural network saved to " + self.model_path)
 
-    def load_model(self):
+    def init_model(self,
+        dropout=True,
+        extra_layer=False,
+        ):
         self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
         if not os.path.exists(self.model_path):
             nnodes_per_quart = 8 # this can be tuned by user in the future?
             # define the model -- this could putentially be tuned by user
             quart_inputs = [Input(shape=(16*16,)) for quartidx in range(self.nquarts)]
             x = [Dense(nnodes_per_quart, activation="relu")(quart) for quart in quart_inputs]
-            # add dropout to each input
-            x = [Dropout(0.5)(i) for i in x]
+            if dropout:
+                # add dropout to each input
+                x = [Dropout(0.5)(i) for i in x]
             combined = concatenate(x)
+            if extra_layer:
+                combined = Dense(len(x),activation='relu')(combined)
+                if dropout:
+                    combined = Dropout(0.5)(combined)
             z = Dense(self.num_classes, activation='softmax')(combined)
 
             model = Model(inputs=quart_inputs,outputs=z)
@@ -256,6 +264,13 @@ class BatchTrain:
 
             model.save(self.model_path)
             print("New neural network saved to: " + self.model_path)
+        else:
+            print("Model already defined -- use load_model() to import")
+
+    def load_model(self):
+        self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
+        if not os.path.exists(self.model_path):
+            print("No model with this output name yet defined -- initialize a model with init_model()")
         else:
             print("Loading existing neural network: " + self.model_path)
             self.model = load_model(self.model_path)
