@@ -251,7 +251,7 @@ class BatchTrain:
                 x = [Dropout(0.5)(i) for i in x]
             combined = concatenate(x)
             if extra_layer:
-                combined = Dense(len(x)*2,activation='relu')(combined) # 2x as many quartets for nodes for this layer
+                combined = Dense(self.num_classes,activation='relu')(combined) # as many nodes as outputs here - arbitrary
                 if dropout:
                     combined = Dropout(0.5)(combined)
             z = Dense(self.num_classes, activation='softmax')(combined)
