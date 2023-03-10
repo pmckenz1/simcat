@@ -340,7 +340,7 @@ class IPCoalWrapper:
                 ))
 
             # define the model if there is one...
-            if not np.isnan(self.rate_vector):
+            if not np.any(np.isnan(self.rate_vector)):
                 subst_model = ms.GTR(self.rate_vector, self.pi_vector)
             else:
                 subst_model = 'JC69'
