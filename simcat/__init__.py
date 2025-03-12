@@ -6,11 +6,13 @@ from .Database import Database    # BUILDS THE DATABASE OF LABELS
 from .Analysis import Analysis          # POST-SIM ANALYSIS
 from .Simulator import Simulator
 from . import plot
-from .BatchTrain import BatchTrain            #
-# from .Streamer import Streamer  # PULLS FROM DB TO RUN SIMS ON ENGINES
-# from .Model import Model        # DEPRECATED TO SIMCOAL
-# from .Genes import Genes        # DEPRECATED TO SIMCOAL
-# from . import utils             #
+#from .BatchTrain import BatchTrain            #
+def __getattr__(name):
+    if name == "BatchTrain":
+        # Import BatchTrain (and thus TensorFlow) only when accessed
+        from .BatchTrain import BatchTrain
+        return BatchTrain
+    raise AttributeError(f"module {__name__} has no attribute {name}")
 
 
 
