@@ -278,8 +278,7 @@ class BatchTrain:
 
     def train(self,
               batch_size,
-              num_epochs,
-              workers=4):
+              num_epochs):
         #countsfile = h5py.File(self.counts_filepath, 'r')
         an_file = h5py.File(self.analysis_filepath, 'r')
 
@@ -320,9 +319,7 @@ class BatchTrain:
                            verbose=1,
                            epochs=1,
                            validation_data=validation_batch_generator,
-                           validation_steps=validation_batch_generator.__len__(),
-                           workers=workers,
-                           use_multiprocessing=True)
+                           validation_steps=validation_batch_generator.__len__())
 
             self.model.save(self.model_path)
 
