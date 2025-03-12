@@ -324,11 +324,11 @@ class Database:
                           data=np.zeros(shape=(lnodes[0],),
                                    dtype=np.int64)
                           )
-        i5.create_dataset(name="treeheight", shape=(lnodes[0],), dtype=np.float64)
+        i5.create_dataset(name="treeheight", shape=(lnodes[0],), dtype=float)
 
         # array of admixture quadruplets (source, dest, time, prop)
         ashape = (self.nstored_labels, self.nedges, 4)
-        i5.create_dataset(name="admixture", shape=ashape, dtype=np.float64)
+        i5.create_dataset(name="admixture", shape=ashape, dtype=float)
 
         # close the files
         i5.close()
@@ -345,9 +345,9 @@ class Database:
         chunksize = 10000
         arr_h = np.zeros((chunksize, self.inodes), dtype=np.int64)
         arr_n = np.zeros((chunksize, self.tree.nnodes), dtype=np.int64)
-        arr_a = np.zeros((chunksize, self.nedges, 4), dtype=np.float)
+        arr_a = np.zeros((chunksize, self.nedges, 4), dtype=float)
         arr_s = np.zeros((chunksize,), dtype=np.int64)
-        arr_d = np.zeros((chunksize,), dtype=np.float64)
+        arr_d = np.zeros((chunksize,), dtype=float)
 
         # test is a sampled nodeslide (heights, edges), migrate, migprop, Nes
         wdx = 0
