@@ -321,7 +321,8 @@ class BatchTrain:
                            epochs=1,
                            validation_data=validation_batch_generator,
                            validation_steps=validation_batch_generator.__len__(),
-                           workers=workers)
+                           workers=workers,
+                           use_multiprocessing=True)
 
             self.model.save(self.model_path)
 
@@ -366,7 +367,7 @@ class BatchTrain:
         y = np.empty((len(batch_idxs)), dtype=int)
 
         X_ = np.array([countsfile['counts'][_] for _ in batch_idxs])
-        X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
+        X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=float)
         for row in range(X.shape[0]):
             X[row] = np.array([get_snps_count_matrix(tree, X_[row])])
         #X = X.reshape(X.shape[0], -1)
@@ -489,7 +490,7 @@ class DataGenerator(Sequence):
         X_ = X_.reshape(X_.shape[0],X_.shape[2],X_.shape[3])
         con.close()
         ############
-        X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=np.float)
+        X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=float)
         for row in range(X.shape[0]):
             X[row] = np.array([get_snps_count_matrix(self.tree, X_[row])])
 
