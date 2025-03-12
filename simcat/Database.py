@@ -319,10 +319,10 @@ class Database:
         allnodes = (self.nstored_labels, self.tree.nnodes)
         i5.create_dataset(name="node_heights", shape=lnodes, dtype=np.int64)
         i5.create_dataset(name="node_Nes", shape=allnodes, dtype=np.int64)
-        i5.create_dataset(name="slide_seeds", shape=(lnodes[0],), dtype=np.int)
+        i5.create_dataset(name="slide_seeds", shape=(lnodes[0],), dtype=np.int64)
         i5.create_dataset(name="finished_sims",
                           data=np.zeros(shape=(lnodes[0],),
-                                   dtype=np.int)
+                                   dtype=np.int64)
                           )
         i5.create_dataset(name="treeheight", shape=(lnodes[0],), dtype=np.float64)
 
@@ -343,10 +343,10 @@ class Database:
 
         # arrays to write in chunks to the h5 array
         chunksize = 10000
-        arr_h = np.zeros((chunksize, self.inodes), dtype=np.int)
-        arr_n = np.zeros((chunksize, self.tree.nnodes), dtype=np.int)
+        arr_h = np.zeros((chunksize, self.inodes), dtype=np.int64)
+        arr_n = np.zeros((chunksize, self.tree.nnodes), dtype=np.int64)
         arr_a = np.zeros((chunksize, self.nedges, 4), dtype=np.float)
-        arr_s = np.zeros((chunksize,), dtype=np.int)
+        arr_s = np.zeros((chunksize,), dtype=np.int64)
         arr_d = np.zeros((chunksize,), dtype=np.float64)
 
         # test is a sampled nodeslide (heights, edges), migrate, migprop, Nes
