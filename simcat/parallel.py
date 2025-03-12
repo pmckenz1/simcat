@@ -260,7 +260,7 @@ class Parallel(object):
             # set ncores to max if user did not set
             else:
                 if not self.tool.ipcluster["cores"]:
-                    self.tool.ipcluster["cores"] = detect_cpus()
+                    self.tool.ipcluster["cores"] = get_allocated_cores()
 
                 # launch ipcluster and get the parallel client with ipp-{} id
                 if self.auto:
@@ -343,24 +343,44 @@ class Parallel(object):
             print("warning: error during shutdown:\n{}".format(inst2))
 
 
-
 def detect_cpus():
-    """
-    Detects the number of CPUs on a system. This is better than asking
-    ipyparallel since ipp has to wait for Engines to spin up.
-    """
-    # Linux, Unix and MacOS:
+    # Detects total CPUs on the system (works for personal computers)
     if hasattr(os, "sysconf"):
         if os.sysconf_names.get("SC_NPROCESSORS_ONLN"):
-            # Linux & Unix:
             ncpus = os.sysconf("SC_NPROCESSORS_ONLN")
             if isinstance(ncpus, int) and ncpus > 0:
                 return ncpus
-        else:  # OSX:
-            return int(os.popen2("sysctl -n hw.ncpu")[1].read())
-    # Windows:
+        try:
+            output = subprocess.check_output(["sysctl", "-n", "hw.ncpu"])
+            return int(output.strip())
+        except Exception:
+            pass
     if os.environ.get("NUMBER_OF_PROCESSORS"):
-        ncpus = int(os.environ["NUMBER_OF_PROCESSORS"])
-        if ncpus > 0:
-            return ncpus
-    return 1  # Default
+        try:
+            ncpus = int(os.environ["NUMBER_OF_PROCESSORS"])
+            if ncpus > 0:
+                return ncpus
+        except ValueError:
+            pass
+    return 1
+
+
+def get_allocated_cores():
+    """
+    Returns the number of cores allocated by SLURM if available.
+    Falls back to the total number of CPUs otherwise.
+    """
+    slurm_cores = os.environ.get("SLURM_CPUS_ON_NODE")
+    if slurm_cores:
+        try:
+            return int(slurm_cores)
+        except ValueError:
+            pass
+    slurm_job_cpus = os.environ.get("SLURM_JOB_CPUS_PER_NODE")
+    if slurm_job_cpus:
+        try:
+            # In some cases, this may be a comma-separated list.
+            return int(slurm_job_cpus.split(',')[0])
+        except ValueError:
+            pass
+    return detect_cpus()
