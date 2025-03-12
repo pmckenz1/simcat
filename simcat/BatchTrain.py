@@ -245,7 +245,7 @@ class BatchTrain:
         if not os.path.exists(self.model_path) or force:
             nnodes_per_quart = 8 # this can be tuned by user in the future?
             # define the model -- this could putentially be tuned by user
-            quart_inputs = [Input(shape=(16*16,)) for quartidx in range(self.nquarts)]
+            quart_inputs = [Input(shape=(16*16,), name="input_" + str(i+1)) for i in range(self.nquarts)]
             x = [Dense(nnodes_per_quart, activation="relu")(quart) for quart in quart_inputs]
             if dropout:
                 # add dropout to each input
@@ -460,7 +460,7 @@ class DataGenerator(Sequence):
         #yield ({'input_1': x1, 'input_2': x2}, {'output': y})
 
         #return X, y
-
+        #Xdict = {'input_layer' if i == 0 else 'input_layer_' + str(i): X[:, i, :] for i in range(self.nquarts)}
         Xdict = {'input_'+str(i+1): X[:,i,:] for i in range(self.nquarts)}
         ydict = y
 
