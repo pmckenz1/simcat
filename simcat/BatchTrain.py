@@ -221,63 +221,52 @@ class BatchTrain:
         self.newick = an_file.attrs['newick']
         self.nquarts = an_file.attrs['nquarts']
 
-#    def init_model(self,
-#        nnodes_per_quart=8,
-#        ):
-#        # define the model -- this could putentially be tuned by user
-#        quart_inputs = [Input(shape=(16*16,)) for quartidx in range(self.nquarts)]
-#        x = [Dense(nnodes_per_quart, activation="relu")(quart) for quart in quart_inputs]
-#        combined = concatenate(x)
-#        z = Dense(self.num_classes, activation='softmax')(combined)
-#
-#        model = Model(inputs=quart_inputs,outputs=z)
-#
-#        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-#
-#        self.model = model
-#        self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
-#        model.save(self.model_path)
-#        print("New neural network saved to " + self.model_path)
 
-    def init_model(self,
-        dropout=True,
-        extra_layer=False,
-        force=False
-        ):
-        self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
+    def init_model(self, dropout=True, extra_layer=False, force=False, save=True):
+        self.model_path = os.path.join(self.directory, self.output_name + ".model.h5")
         if not os.path.exists(self.model_path) or force:
-            nnodes_per_quart = 8 # this can be tuned by user in the future?
-            # define the model -- this could putentially be tuned by user
-            quart_inputs = [Input(shape=(16*16,), name="input_" + str(i+1)) for i in range(self.nquarts)]
+            nnodes_per_quart = 8  # or make this tunable later
+
+            quart_inputs = [
+                Input(shape=(16 * 16,), name=f"input_{i + 1}") for i in range(self.nquarts)
+            ]
             x = [Dense(nnodes_per_quart, activation="relu")(quart) for quart in quart_inputs]
+
             if dropout:
-                # add dropout to each input
-                x = [Dropout(0.5)(i) for i in x]
+                x = [Dropout(0.5)(layer) for layer in x]
+
             combined = concatenate(x)
+
             if extra_layer:
-                combined = Dense(self.num_classes,activation='relu')(combined) # as many nodes as outputs here - arbitraryBa
+                combined = Dense(self.num_classes, activation='relu')(combined)
                 if dropout:
                     combined = Dropout(0.5)(combined)
-            z = Dense(self.num_classes, activation='softmax')(combined)
 
-            model = Model(inputs=quart_inputs,outputs=z)
+            outputs = Dense(self.num_classes, activation='softmax')(combined)
+            self.model = Model(inputs=quart_inputs, outputs=outputs)
 
-            model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+            self.model.compile(loss='categorical_crossentropy',
+                               optimizer='adam',
+                               metrics=['accuracy'])
 
-            self.model = model
-
-            model.save(self.model_path)
-            print("New neural network saved to: " + self.model_path)
+            if save:
+                self.model.save(self.model_path)
+                print("New neural network saved to:", self.model_path)
         else:
-            print("Model already defined -- use load_model() to import")
+            print("Model already exists. Load it using `load_model()`.")
 
     def load_model(self):
-        self.model_path = os.path.join(self.directory,self.output_name+".model.h5")
-        if not os.path.exists(self.model_path):
-            print("No model with this output name yet defined -- initialize a model with init_model()")
-        else:
-            print("Loading existing neural network: " + self.model_path)
+        self.model_path = os.path.join(self.directory, self.output_name + ".model.h5")
+        if os.path.exists(self.model_path):
+            print("Loading existing neural network:", self.model_path)
             self.model = load_model(self.model_path)
+            
+            # Always explicitly recompile after loading
+            self.model.compile(loss='categorical_crossentropy',
+                               optimizer='adam',
+                               metrics=['accuracy'])
+        else:
+            raise FileNotFoundError("Model file not found. Use `init_model()` to create one.")
 
 
     def get_data(self,
@@ -352,7 +341,6 @@ class BatchTrain:
 
 
     def train(self, batch_size, num_epochs):        
-        # Load IDs and labels once at the start
         with h5py.File(self.analysis_filepath, 'r') as an_file:
             training_ids = an_file['training'][:]
             testing_ids = an_file['testing'][:]
@@ -360,41 +348,27 @@ class BatchTrain:
             n_classes = an_file.attrs['num_classes']
 
         tree = toytree.tree(self.newick)
-        
-        # Open counts file once at the beginning
         counts_h5 = h5py.File(self.counts_filepath, 'r')
 
-        # Function to fetch and process data from HDF5
         def load_from_h5(sample_id):
-            sample_id = int(sample_id)
+            sample_id = sample_id.item()
             raw_counts = counts_h5['counts'][sample_id]
             processed = get_snps_count_matrix(tree, raw_counts)
             processed = processed.reshape(self.nquarts, -1).astype('float32')
             processed /= processed.max(axis=1, keepdims=True)
             label = to_categorical(labels_dict[sample_id], num_classes=n_classes)
-
             return tuple([processed[i] for i in range(self.nquarts)] + [label])
 
-        # TF mapping wrapper
         def tf_load(sample_id):
             output_types = tuple([tf.float32] * self.nquarts + [tf.float32])
-
-            result = tf.py_function(
-                load_from_h5, [sample_id],
-                Tout=output_types
-            )
-
+            result = tf.py_function(load_from_h5, [sample_id], Tout=output_types)
             inputs = {f'input_{i+1}': result[i] for i in range(self.nquarts)}
             label = result[-1]
-
-            # Set explicit shapes for tensors
             for i in range(self.nquarts):
                 inputs[f'input_{i+1}'].set_shape([256])
             label.set_shape([self.num_classes])
-
             return inputs, label
 
-        # Create datasets
         ds_train = (tf.data.Dataset.from_tensor_slices(training_ids)
                     .map(tf_load, num_parallel_calls=tf.data.AUTOTUNE)
                     .batch(batch_size)
@@ -405,16 +379,13 @@ class BatchTrain:
                   .batch(batch_size)
                   .prefetch(tf.data.AUTOTUNE))
 
-        # Train model
-        self.model.fit(
-            ds_train,
-            epochs=num_epochs,
-            validation_data=ds_val,
-            verbose=1
-        )
+        self.model.fit(ds_train, epochs=num_epochs, validation_data=ds_val, verbose=1)
 
         counts_h5.close()
+
+        # Explicitly save updated model
         self.model.save(self.model_path)
+        print("Model trained and saved to:", self.model_path)
 
 
 def convert_array(text):
