@@ -371,18 +371,27 @@ class BatchTrain:
             processed = processed.reshape(self.nquarts, -1).astype('float32')
             processed /= processed.max(axis=1, keepdims=True)
             label = to_categorical(labels_dict[sample_id], num_classes=n_classes)
-            inputs = {f'input_{i+1}': processed[i] for i in range(self.nquarts)}
-            return inputs, label
+
+            # Return tuple (inputs as list, label)
+            return tuple([processed[i] for i in range(self.nquarts)] + [label])
 
         # TF mapping wrapper
         def tf_load(sample_id):
-            inputs, label = tf.py_function(
+            output_types = tuple([tf.float32] * self.nquarts + [tf.float32])
+
+            result = tf.py_function(
                 load_from_h5, [sample_id],
-                Tout=({f'input_{i+1}': tf.float32 for i in range(self.nquarts)}, tf.float32)
+                Tout=output_types
             )
+
+            inputs = {f'input_{i+1}': result[i] for i in range(self.nquarts)}
+            label = result[-1]
+
+            # Set explicit shapes for tensors
             for i in range(self.nquarts):
                 inputs[f'input_{i+1}'].set_shape([256])
-            label.set_shape([n_classes])
+            label.set_shape([self.num_classes])
+
             return inputs, label
 
         # Create datasets
