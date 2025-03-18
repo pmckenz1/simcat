@@ -351,7 +351,7 @@ class BatchTrain:
         counts_h5 = h5py.File(self.counts_filepath, 'r')
 
         def load_from_h5(sample_id):
-            sample_id = sample_id.item()
+            sample_id = int(sample_id)
             raw_counts = counts_h5['counts'][sample_id]
             processed = get_snps_count_matrix(tree, raw_counts)
             processed = processed.reshape(self.nquarts, -1).astype('float32')
