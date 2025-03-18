@@ -372,7 +372,8 @@ class BatchTrain:
         X_ = np.array([countsfile['counts'][_] for _ in batch_idxs])
         X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=float)
         for row in range(X.shape[0]):
-            X[row] = np.array([get_snps_count_matrix(tree, X_[row])])
+            X[row] = get_snps_count_matrix(tree, X_[row])
+            #X[row] = np.array([get_snps_count_matrix(tree, X_[row])])
         #X = X.reshape(X.shape[0], -1)
         #maxes_vector = np.max(X, axis=1) # finds max of each row
         # dividing each row by its max, slicing per: 
@@ -498,7 +499,8 @@ class DataGenerator(Sequence):
         ############
         X = np.zeros(shape=(X_.shape[0], self.nquarts, 16, 16), dtype=float)
         for row in range(X.shape[0]):
-            X[row] = np.array([get_snps_count_matrix(self.tree, X_[row])])
+            #X[row] = np.array([get_snps_count_matrix(self.tree, X_[row])])
+            X[row] = get_snps_count_matrix(self.tree, X_[row])
 
         # squash all quartets into one giant row?? Next five lines:
         #X = X.reshape(X.shape[0], -1)
