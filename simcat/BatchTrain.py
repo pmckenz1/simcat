@@ -279,6 +279,9 @@ class BatchTrain:
     def train(self,
               batch_size,
               num_epochs):
+        import tensorflow as tf  # Import tf here if not done globally
+        print("TensorFlow version:", tf.__version__)
+        print("tf.keras version:", tf.keras.__version__)
         #countsfile = h5py.File(self.counts_filepath, 'r')
         an_file = h5py.File(self.analysis_filepath, 'r')
 
