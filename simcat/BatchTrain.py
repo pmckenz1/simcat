@@ -460,7 +460,7 @@ def map_func(sample_id, sql_path, tree, labels, nquarts, n_classes):
         input_tensors[f'input_{i+1}'] = tensor
     label_tensor = outputs[-1]
     label_tensor.set_shape([n_classes])
-    return input_tensors, label_tenso
+    return input_tensors, label_tensor
 
 
 def convert_array(text):
