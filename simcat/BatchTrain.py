@@ -415,37 +415,40 @@ class BatchTrain:
 # This function uses the get_snps_count_matrix() and mimics the __data_generation logic from previous versions
 # Changed to avoid eager requirement
 def load_sample_py(sample_id, sql_path, tree, labels, nquarts, n_classes):
-    # Convert the tensor to a numpy scalar without calling .numpy() directly.
+    # Convert sample_id to an integer using numpy (avoids calling .numpy() on a tensor)
     sample_id = int(np.array(sample_id))
     
-    # Open a new connection (each call gets its own connection)
+    # Open a new connection for this call
     con = sqlite3.connect(sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
     cur = con.cursor()
     result = cur.execute("select arr from counts where id={}".format(sample_id)).fetchone()
     con.close()
 
-    # 'arr' should be a numpy array with shape (nquarts, 16, 16)
+    # Get the raw array; expected shape is (nquarts, 16, 16)
     arr = result[0]
+    
     # Process the raw counts
     processed = get_snps_count_matrix(tree, arr)  # expected shape: (nquarts, 16, 16)
     
-    # In case get_snps_count_matrix returns a Tensor or RaggedTensor, convert it to a numpy array.
-    if hasattr(processed, 'numpy'):
-        processed = processed.numpy()
+    # Force conversion to a NumPy array without calling .numpy() explicitly.
+    # If processed is a tf.RaggedTensor, first convert it to a dense tensor.
+    if isinstance(processed, tf.RaggedTensor):
+        processed = np.array(processed.to_tensor())
     else:
         processed = np.array(processed)
     
-    # Reshape each quartet to a vector (256 = 16*16)
+    # Reshape each quartet to a vector (flatten 16x16 to 256)
     processed = processed.reshape(nquarts, -1)  # shape: (nquarts, 256)
+    
     # Normalize each quartet individually
     max_vals = np.max(processed, axis=1, keepdims=True)
     processed = processed / max_vals
 
-    # Get the label for this sample and convert to one-hot
+    # Get the label for this sample and convert to one-hot encoding
     label_val = labels[sample_id]
     one_hot = to_categorical(label_val, num_classes=n_classes)
 
-    # Return a tuple: one numpy array per input (in order) plus the label.
+    # Return a tuple: one array per model input (for each quartet) plus the label.
     outputs = tuple([processed[i] for i in range(nquarts)] + [one_hot])
     return outputs
 
