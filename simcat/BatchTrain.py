@@ -282,6 +282,9 @@ class BatchTrain:
         import tensorflow as tf  # Import tf here if not done globally
         print("TensorFlow version:", tf.__version__)
         print("tf.keras version:", tf.keras.__version__)
+        print("Executing eagerly:", tf.executing_eagerly())
+        if not tf.executing_eagerly():
+            tf.compat.v1.enable_eager_execution()
         #countsfile = h5py.File(self.counts_filepath, 'r')
         an_file = h5py.File(self.analysis_filepath, 'r')
 
