@@ -11,18 +11,16 @@ import toytree
 import pandas as pd
 import sqlite3
 import io
+import itertools
 
-from simcat.utils import get_snps_count_matrix
+#from simcat.utils import get_snps_count_matrix
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.models import load_model
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.layers import Dense, Dropout, concatenate
 from tensorflow.keras import Input, Model
-
 import tensorflow as tf
-import sqlite3
-import numpy as np
-from tensorflow.keras.utils import to_categorical
+from numba import njit
 
 class BatchTrain:
     def __init__(self,
@@ -263,7 +261,7 @@ class BatchTrain:
 
             model = Model(inputs=quart_inputs,outputs=z)
 
-            model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'],run_eagerly=True)
+            model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
             self.model = model
 
@@ -352,126 +350,62 @@ class BatchTrain:
         return(pred_df)
 
 
-    # Example new train method for BatchTrain class using tf.data:
-    def train(self, batch_size, num_epochs):
-        import tensorflow as tf
-        print("TensorFlow version:", tf.__version__)
-        print("tf.keras version:", tf.keras.__version__)
-        print("Executing eagerly:", tf.executing_eagerly())
-        if not tf.executing_eagerly():
-            tf.compat.v1.enable_eager_execution()
+    def train(self, batch_size, num_epochs):        
+        # Load IDs and labels once at the start
+        with h5py.File(self.analysis_filepath, 'r') as an_file:
+            training_ids = an_file['training'][:]
+            testing_ids = an_file['testing'][:]
+            labels_dict = dict(an_file['labels'][:])
+            n_classes = an_file.attrs['num_classes']
 
-        # Open analysis file to get indices and attributes
-        an_file = h5py.File(self.analysis_filepath, 'r')
-        training_ids = np.array(an_file['training'])
-        testing_ids = np.array(an_file['testing'])
-        n_classes = an_file.attrs['num_classes']
-        nquarts = an_file.attrs['nquarts']
-        newick = an_file.attrs['newick']
-        an_file.close()
+        tree = toytree.tree(self.newick)
+        
+        # Open counts file once at the beginning
+        counts_h5 = h5py.File(self.counts_filepath, 'r')
 
-        # Build the tree and labels dict (as before)
-        tree = toytree.tree(newick)
-        # Load labels from analysis file
-        an_file = h5py.File(self.analysis_filepath, 'r')
-        labels = dict(zip(an_file['labels'][:, 0], an_file['labels'][:, 1]))
-        an_file.close()
+        # Function to fetch and process data from HDF5
+        def load_from_h5(sample_id):
+            sample_id = sample_id.numpy()
+            raw_counts = counts_h5['counts'][sample_id]
+            processed = get_snps_count_matrix(tree, raw_counts)
+            processed = processed.reshape(self.nquarts, -1).astype('float32')
+            processed /= processed.max(axis=1, keepdims=True)
+            label = to_categorical(labels_dict[sample_id], num_classes=n_classes)
+            inputs = {f'input_{i+1}': processed[i] for i in range(self.nquarts)}
+            return inputs, label
 
-        # Define the SQL path (as in __init__)
-        sql_path = os.path.join(self.directory, self.input_name + '.counts.db')
-
-        # Create a tf.data.Dataset for training IDs
-        ds_train = tf.data.Dataset.from_tensor_slices(training_ids)
-        # Map each sample ID to its processed inputs and label.
-        ds_train = ds_train.map(
-            lambda sid: map_func(sid, sql_path, tree, labels, nquarts, n_classes),
-            num_parallel_calls=tf.data.AUTOTUNE
-        )
-        ds_train = ds_train.batch(batch_size)
-        ds_train = ds_train.prefetch(tf.data.AUTOTUNE)
-
-        # Do the same for validation/test dataset
-        ds_val = tf.data.Dataset.from_tensor_slices(testing_ids)
-        ds_val = ds_val.map(
-            lambda sid: map_func(sid, sql_path, tree, labels, nquarts, n_classes),
-            num_parallel_calls=tf.data.AUTOTUNE
-        )
-        ds_val = ds_val.batch(batch_size)
-        ds_val = ds_val.prefetch(tf.data.AUTOTUNE)
-
-        # Train the model for the specified number of epochs.
-        for epoch in range(num_epochs):
-            print("Epoch {}/{}".format(epoch + 1, num_epochs))
-            self.model.fit(
-                ds_train,
-                epochs=1,
-                validation_data=ds_val,
-                verbose=1
+        # TF mapping wrapper
+        def tf_load(sample_id):
+            inputs, label = tf.py_function(
+                load_from_h5, [sample_id],
+                Tout=({f'input_{i+1}': tf.float32 for i in range(self.nquarts)}, tf.float32)
             )
-            self.model.save(self.model_path)
+            for i in range(self.nquarts):
+                inputs[f'input_{i+1}'].set_shape([256])
+            label.set_shape([n_classes])
+            return inputs, label
 
+        # Create datasets
+        ds_train = (tf.data.Dataset.from_tensor_slices(training_ids)
+                    .map(tf_load, num_parallel_calls=tf.data.AUTOTUNE)
+                    .batch(batch_size)
+                    .prefetch(tf.data.AUTOTUNE))
 
-# Define a helper that loads and processes one sample from the database.
-# This function uses the get_snps_count_matrix() and mimics the __data_generation logic from previous versions
-# Changed to avoid eager requirement
-def load_sample_py(sample_id, sql_path, tree, labels, nquarts, n_classes):
-    # Convert sample_id to an integer using numpy (avoids calling .numpy() on a tensor)
-    sample_id = int(np.array(sample_id))
-    
-    # Open a new connection for this call
-    con = sqlite3.connect(sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
-    cur = con.cursor()
-    result = cur.execute("select arr from counts where id={}".format(sample_id)).fetchone()
-    con.close()
+        ds_val = (tf.data.Dataset.from_tensor_slices(testing_ids)
+                  .map(tf_load, num_parallel_calls=tf.data.AUTOTUNE)
+                  .batch(batch_size)
+                  .prefetch(tf.data.AUTOTUNE))
 
-    # Get the raw array; expected shape is (nquarts, 16, 16)
-    arr = result[0]
-    
-    # Process the raw counts
-    processed = get_snps_count_matrix(tree, arr)  # expected shape: (nquarts, 16, 16)
-    
-    # Force conversion to a NumPy array without calling .numpy() explicitly.
-    # If processed is a tf.RaggedTensor, first convert it to a dense tensor.
-    if isinstance(processed, tf.RaggedTensor):
-        processed = np.array(processed.to_tensor())
-    else:
-        processed = np.array(processed)
-    
-    # Reshape each quartet to a vector (flatten 16x16 to 256)
-    processed = processed.reshape(nquarts, -1)  # shape: (nquarts, 256)
-    
-    # Normalize each quartet individually
-    max_vals = np.max(processed, axis=1, keepdims=True)
-    processed = processed / max_vals
+        # Train model
+        self.model.fit(
+            ds_train,
+            epochs=num_epochs,
+            validation_data=ds_val,
+            verbose=1
+        )
 
-    # Get the label for this sample and convert to one-hot encoding
-    label_val = labels[sample_id]
-    one_hot = to_categorical(label_val, num_classes=n_classes)
-
-    # Return a tuple: one array per model input (for each quartet) plus the label.
-    outputs = tuple([processed[i] for i in range(nquarts)] + [one_hot])
-    return outputs
-
-# Wrapper mapping function that uses tf.py_function.
-def map_func(sample_id, sql_path, tree, labels, nquarts, n_classes):
-    # Specify output types for each element:
-    # one tf.float32 tensor per input (nquarts total) and one for the label.
-    output_types = tuple([tf.float32] * nquarts + [tf.float32])
-    # Call load_sample_py via tf.py_function.
-    outputs = tf.py_function(
-        func=lambda sid: load_sample_py(sid, sql_path, tree, labels, nquarts, n_classes),
-        inp=[sample_id],
-        Tout=output_types
-    )
-    # Set static shapes so downstream layers know what to expect.
-    input_tensors = {}
-    for i in range(nquarts):
-        tensor = outputs[i]
-        tensor.set_shape([256])
-        input_tensors[f'input_{i+1}'] = tensor
-    label_tensor = outputs[-1]
-    label_tensor.set_shape([n_classes])
-    return input_tensors, label_tensor
+        counts_h5.close()
+        self.model.save(self.model_path)
 
 
 def convert_array(text):
@@ -488,3 +422,38 @@ def get_sister_idxs(tre):
         if len(node.children) == 2:
             sisters.append(list(np.sort([i.idx for i in node.children])))
     return(sisters)
+
+
+def get_snps_count_matrix(tree, seqs):
+    """
+    Compiles SNP data into a nquartets x 16 x 16 count matrix with the order
+    of quartets determined by the shape of the tree.
+    """
+    # get all quartets for this size tree
+    quarts = list(itertools.combinations(range(tree.ntips), 4))
+
+    # shape of the arr (count matrix)
+    arr = np.zeros((len(quarts), 16, 16), dtype=np.int64)
+
+    # iterator for quartets, e.g., (0, 1, 2, 3), (0, 1, 2, 4)...
+    quartidx = 0
+    for currquart in quarts:
+        # cols indices match tip labels b/c we named tips node.idx
+        quartsnps = seqs[currquart, :]
+        # save as stacked matrices
+        arr[quartidx] = count_matrix_int(quartsnps)
+        # save flattened to counts
+        quartidx += 1
+    return arr
+
+
+@njit
+def count_matrix_int(quartsnps):
+    """
+    return a 16x16 matrix of site counts from snparr
+    """
+    arr = np.zeros((16, 16), dtype=np.int64)
+    for idx in range(quartsnps.shape[1]):
+        i = quartsnps[:, idx]
+        arr[(4 * i[0]) + i[1], (4 * i[2]) + i[3]] += 1
+    return arr
