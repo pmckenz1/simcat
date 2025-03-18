@@ -263,7 +263,7 @@ class BatchTrain:
 
             model = Model(inputs=quart_inputs,outputs=z)
 
-            model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+            model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'],run_eagerly=True)
 
             self.model = model
 
@@ -426,7 +426,7 @@ def load_sample_py(sample_id, sql_path, tree, labels, nquarts, n_classes):
 
     # 'arr' should be a numpy array with shape (nquarts, 16, 16)
     arr = result[0]
-    # Process the raw counts using your custom function
+    # Process the raw counts
     processed = get_snps_count_matrix(tree, arr)  # expected shape: (nquarts, 16, 16)
     
     # In case get_snps_count_matrix returns a Tensor or RaggedTensor, convert it to a numpy array.
