@@ -430,8 +430,11 @@ class DataGenerator(Sequence):
                  newick,
                  nquarts,
                  batch_size=32,
-                 shuffle=True):
+                 shuffle=True,
+                 **kwargs
+                 ):
         'Initialization'
+        super().__init__(**kwargs)
         self.batch_size = batch_size
         self.labels = labels
         #self.data_file = data_file
