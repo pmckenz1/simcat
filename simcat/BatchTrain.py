@@ -20,6 +20,7 @@ from tensorflow.keras.utils import Sequence
 from tensorflow.keras.layers import Dense, Dropout, concatenate
 from tensorflow.keras import Input, Model
 import tensorflow as tf
+tf.config.run_functions_eagerly(True)
 from numba import njit
 
 class BatchTrain:
