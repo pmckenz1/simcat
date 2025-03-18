@@ -365,14 +365,13 @@ class BatchTrain:
 
         # Function to fetch and process data from HDF5
         def load_from_h5(sample_id):
-            sample_id = sample_id.numpy()
+            sample_id = int(sample_id)
             raw_counts = counts_h5['counts'][sample_id]
             processed = get_snps_count_matrix(tree, raw_counts)
             processed = processed.reshape(self.nquarts, -1).astype('float32')
             processed /= processed.max(axis=1, keepdims=True)
             label = to_categorical(labels_dict[sample_id], num_classes=n_classes)
 
-            # Return tuple (inputs as list, label)
             return tuple([processed[i] for i in range(self.nquarts)] + [label])
 
         # TF mapping wrapper
