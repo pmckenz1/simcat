@@ -413,19 +413,28 @@ class BatchTrain:
 
 # Define a helper that loads and processes one sample from the database.
 # This function uses the get_snps_count_matrix() and mimics the __data_generation logic from previous versions
+# Changed to avoid eager requirement
 def load_sample_py(sample_id, sql_path, tree, labels, nquarts, n_classes):
-    sample_id = int(sample_id)
+    # Convert the tensor to a numpy scalar without calling .numpy() directly.
+    sample_id = int(np.array(sample_id))
+    
     # Open a new connection (each call gets its own connection)
     con = sqlite3.connect(sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
     cur = con.cursor()
-    # Execute query to get the sample from the SQL DB
     result = cur.execute("select arr from counts where id={}".format(sample_id)).fetchone()
     con.close()
-    
+
     # 'arr' should be a numpy array with shape (nquarts, 16, 16)
     arr = result[0]
-    # Process the raw counts
+    # Process the raw counts using your custom function
     processed = get_snps_count_matrix(tree, arr)  # expected shape: (nquarts, 16, 16)
+    
+    # In case get_snps_count_matrix returns a Tensor or RaggedTensor, convert it to a numpy array.
+    if hasattr(processed, 'numpy'):
+        processed = processed.numpy()
+    else:
+        processed = np.array(processed)
+    
     # Reshape each quartet to a vector (256 = 16*16)
     processed = processed.reshape(nquarts, -1)  # shape: (nquarts, 256)
     # Normalize each quartet individually
@@ -436,8 +445,7 @@ def load_sample_py(sample_id, sql_path, tree, labels, nquarts, n_classes):
     label_val = labels[sample_id]
     one_hot = to_categorical(label_val, num_classes=n_classes)
 
-    # Instead of returning a dict directly, return a tuple with one tensor per input.
-    # Later we convert these into a dict with keys matching the model inputs.
+    # Return a tuple: one numpy array per input (in order) plus the label.
     outputs = tuple([processed[i] for i in range(nquarts)] + [one_hot])
     return outputs
 
