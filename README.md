@@ -12,6 +12,6 @@ See simcat_demo.ipynb in the "notebooks" folder for a walkthrough.
 *In development. Please email pmckenzie@fas.harvard.edu with any questions / feature requests.*  
 
 
-![https://raw.githubusercontent.com/pmckenz1/simcat/master/source/docs/figure2.png](https://raw.githubusercontent.com/pmckenz1/simcat/master/source/docs/figure2.png)  
+![https://raw.githubusercontent.com/pmckenz1/simcat/master/source/docs/figure2.png](https://raw.githubusercontent.com/pmckenz1/simcat/master/deprecated/source/docs/figure2.png)  
 
 (from McKenzie & Eaton *in prep*)
