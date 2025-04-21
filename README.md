@@ -2,7 +2,10 @@
 
 Python package for applying machine learning to infer ancient introgression on a species tree. Given an input species tree, *simcat* automates the simulation of a SNP data training database and simplifies the process of training a neural network on that data and applying it to empirical SNP data.
 
-To install, clone this repo, move into the directory with `cd simcat`, and install with `pip install .`.
+To install:  
+1) Clone this repo: `git clone https://github.com/pmckenz1/simcat.git`  
+2) Move into the directory: `cd simcat`  
+3) Install with pip: `pip install .`  
 
 See simcat_demo.ipynb in the "notebooks" folder for a walkthrough.  
 
