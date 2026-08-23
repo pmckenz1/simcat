@@ -331,6 +331,9 @@ def get_sister_idxs(tre):
 def clean_db(name, workdir):
     # open labels file
     labsfile = h5py.File(os.path.join(workdir, name+'.labels.h5'), 'r+')
+    pending_counts_are_null = bool(
+        labsfile.attrs.get("pending_counts_are_null", False)
+    )
     # get the anticipated total number
     num_total = labsfile['finished_sims'].shape[0]
 
@@ -344,7 +347,10 @@ def clean_db(name, workdir):
     for id_ in range(num_total):
         cur.execute("select arr from counts where id={}".format(id_))
         data = cur.fetchone()
-        if np.sum(data[0]) > 0:
+        has_counts = data is not None and data[0] is not None
+        if has_counts and (
+            pending_counts_are_null or np.sum(data[0]) > 0
+        ):
             finished_counts[id_] = 1
         #finished_counts[id_] = np.sum(data[0])
 

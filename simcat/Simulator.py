@@ -37,7 +37,7 @@ def adapt_array(arr):
 def convert_array(text):
     out = io.BytesIO(text)
     out.seek(0)
-    return np.load(out)
+    return np.load(out, allow_pickle=False)
 
 
 # Converts np.array to TEXT when inserting
@@ -48,9 +48,13 @@ sqlite3.register_converter("array", convert_array)
 
 class Simulator:
     """
-    This is the object that points to an existing database, extracts some rows, 
+    This is the object that points to an existing database, extracts some rows,
     and runs them!
     """
+    PENDING = 0
+    COMPLETE = 1
+    RESERVED = 2
+
     def __init__(
         self,
         name,
@@ -87,101 +91,234 @@ class Simulator:
         self.checkpoint = 0
 
 
-    def _run(self, nsims, ipyclient, children=[]):
+    def _labels_lock(self):
+        """Acquire and return the inter-process labels-file lock."""
+        lock = fasteners.InterProcessLock(self.labels + ".lock")
+        acquired = lock.acquire(
+            blocking=True,
+            delay=np.random.uniform(0.008, 0.015),
+            max_delay=np.random.uniform(0.1, 0.5),
+            timeout=60,
+        )
+        if not acquired:
+            raise SimcatError(
+                "Timed out waiting for the simulation reservation lock: "
+                f"{self.labels}.lock"
+            )
+        return lock
+
+
+    def status(self):
+        """Return counts of pending, complete, and reserved simulations."""
+        if not os.path.exists(self.labels):
+            raise FileNotFoundError(f"Labels database not found: {self.labels}")
+        lock = self._labels_lock()
+        try:
+            with h5py.File(self.labels, "r") as io5:
+                states = np.asarray(io5["finished_sims"])
+        finally:
+            lock.release()
+        return {
+            "total": int(states.size),
+            "pending": int(np.count_nonzero(states == self.PENDING)),
+            "complete": int(np.count_nonzero(states == self.COMPLETE)),
+            "reserved": int(np.count_nonzero(states == self.RESERVED)),
+        }
+
+
+    def recover(self):
+        """Release reservations left by interrupted workers.
+
+        Call this only after confirming that no other process is currently
+        simulating rows from this database. Normal Python task failures release
+        their own reservations automatically; this method is for hard process or
+        scheduler interruptions.
+        """
+        lock = self._labels_lock()
+        try:
+            with h5py.File(self.labels, "r+") as io5:
+                states = io5["finished_sims"]
+                reserved = np.where(
+                    np.asarray(states) == self.RESERVED
+                )[0]
+                if reserved.size:
+                    states[reserved] = self.PENDING
+        finally:
+            lock.release()
+        if not self._quiet:
+            print(f"Released {reserved.size} interrupted simulation rows.")
+        return int(reserved.size)
+
+
+    def _reserve_simulations(self, nsims):
+        """Atomically reserve at most ``nsims`` currently pending rows."""
+        if nsims is not None and (int(nsims) != nsims or nsims <= 0):
+            raise ValueError("nsims must be a positive integer or None")
+
+        lock = self._labels_lock()
+        try:
+            with h5py.File(self.labels, "r+") as io5:
+                states = io5["finished_sims"]
+                available = np.where(
+                    np.asarray(states) == self.PENDING
+                )[0]
+                requested = available.size if nsims is None else int(nsims)
+                selected = available[:requested]
+                if selected.size:
+                    states[selected] = self.RESERVED
+        finally:
+            lock.release()
+
+        if (
+            nsims is not None
+            and selected.size < int(nsims)
+            and not self._quiet
+        ):
+            print(
+                f"Requested {int(nsims)} simulations; reserved the "
+                f"{selected.size} pending rows that remain."
+            )
+        return selected
+
+
+    def _set_simulation_status(self, idxs, status, only_if=None):
+        """Atomically update status for row IDs, optionally conditionally."""
+        idxs = np.asarray(idxs, dtype=int)
+        if not idxs.size:
+            return 0
+        lock = self._labels_lock()
+        try:
+            with h5py.File(self.labels, "r+") as io5:
+                states = io5["finished_sims"]
+                if only_if is None:
+                    selected = idxs
+                else:
+                    current = np.asarray(states[idxs])
+                    selected = idxs[current == only_if]
+                if selected.size:
+                    states[selected] = status
+        finally:
+            lock.release()
+        return int(selected.size)
+
+
+    def _run(self, nsims, ipyclient, children=None):
         """
         Sends jobs to parallel engines to run Simulator.run().
         """
         # if outfile exists and not force then find checkpoint
         # ...
 
-        # load-balancer for distributed parallel jobs
-        lbview = ipyclient.load_balanced_view()
+        for path, label in (
+            (self.labels, "labels HDF5"),
+            (self.sqldb, "counts SQLite"),
+        ):
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"{label} database not found: {path}")
 
-        # set chunksize based on ncores and stored_labels
-        ncores = len(ipyclient)
-        self.chunksize = int(np.ceil(nsims / (ncores * 8)))
-        #self.chunksize = min(12, self.chunksize)
-        self.chunksize = max(4, self.chunksize)
-        #self.chunksize = 4
+        sim_idxs = self._reserve_simulations(nsims)
+        nsims_reserved = len(sim_idxs)
+        if not nsims_reserved:
+            if not self._quiet:
+                print("No pending simulations remain.")
+            return 0
 
-        # designate lock files
-        labslock = fasteners.InterProcessLock(self.labels+'.lock')
-        #countslock = fasteners.InterProcessLock(self.counts+'.lock')
-
-        labslock.acquire(blocking=True,
-            delay=np.random.uniform(0.008, 0.015),
-            max_delay=np.random.uniform(0.1, 0.5),
-            timeout=60)
-        with h5py.File(self.labels,'r+') as i5:
-            finished_sims = i5['finished_sims']
-            avail = np.where(~np.array(finished_sims).astype(bool))[0]
-            sim_idxs = avail[:nsims]
-            for sim_idx in sim_idxs:
-                finished_sims[sim_idx] = 2
-            #finished_sims[sim_idxs] = 2  # code of 2 indicates that these have started
-        labslock.release()
-        # an iterator to return chunked slices of jobs
-        jobs = range(0, nsims, self.chunksize)
-        njobs = int(np.ceil(nsims / self.chunksize))
-
-        # submit jobs to engines
-        rasyncs = {}
-        for slice0 in jobs:
-            slice1 = min(nsims, slice0 + self.chunksize)
-            if slice1 > slice0:
-                args = (self.labels, sim_idxs[slice0:slice1], True)
-                rasyncs[slice0] = lbview.apply(IPCoalWrapper, *args)
-
-        # catch results as they return and enter into H5 to keep mem low.
-        progress = Progress(njobs, "Simulating count matrices", children)
-        progress.increment_all(self.checkpoint)
-        if not self._quiet:
-            progress.display()
-        done = self.checkpoint
+        children = [] if children is None else children
+        progress = None
         try:
+            # load-balancer for distributed parallel jobs
+            lbview = ipyclient.load_balanced_view()
+
+            # set chunksize based on ncores and stored_labels
+            ncores = len(ipyclient)
+            if ncores < 1:
+                raise SimcatError("No ipyparallel engines are connected.")
+            self.chunksize = int(np.ceil(nsims_reserved / (ncores * 8)))
+            self.chunksize = max(4, self.chunksize)
+
+            # submit jobs to engines
+            rasyncs = {}
+            for slice0 in range(0, nsims_reserved, self.chunksize):
+                slice1 = min(nsims_reserved, slice0 + self.chunksize)
+                row_ids = sim_idxs[slice0:slice1]
+                args = (self.labels, row_ids, True)
+                rasyncs[slice0] = (
+                    lbview.apply(IPCoalWrapper, *args),
+                    row_ids,
+                )
+
+            # catch results as they return and enter into SQLite to keep memory
+            # use low in the parent process.
+            njobs = len(rasyncs)
+            progress = Progress(
+                njobs, "Simulating count matrices", children
+            )
+            progress.increment_all(self.checkpoint)
+            if not self._quiet:
+                progress.display()
+
             #io5 = h5py.File(self.counts, mode='r+')
             while 1:
                 # gather finished jobs
-                finished = [i for i, j in rasyncs.items() if j.ready()]
+                finished = [
+                    key for key, (job, _) in rasyncs.items() if job.ready()
+                ]
 
                 # iterate over finished list and insert results
                 for job in finished:
-                    rasync = rasyncs[job]
+                    rasync, row_ids = rasyncs[job]
                     if rasync.successful():
 
                         # store result
-                        done += 1
                         progress.increment_all()
 
                         # object returns, pull out results
                         res = rasync.get()
-                        timeout_time = 900#np.random.randint(600,900)
-                        con = sqlite3.connect(self.sqldb,
-                                              timeout=timeout_time,
-                                              detect_types=sqlite3.PARSE_DECLTYPES)
-                        cur = con.cursor()
-                        for id_ in range(res.counts.shape[0]):
-                            new_arr = res.counts[id_]
-                            cur.execute("update counts set arr=? where id={}".format(sim_idxs[job+id_]), (new_arr, ))
+                        timeout_time = 900
+                        con = sqlite3.connect(
+                            self.sqldb,
+                            timeout=timeout_time,
+                            detect_types=sqlite3.PARSE_DECLTYPES,
+                        )
+                        try:
+                            cur = con.cursor()
+                            if res.counts.shape[0] != len(row_ids):
+                                raise SimcatError(
+                                    "Simulation worker returned an unexpected "
+                                    "number of rows for IDs "
+                                    f"{row_ids.tolist()}."
+                                )
+                            for id_, new_arr in zip(row_ids, res.counts):
+                                cur.execute(
+                                    "update counts set arr=? where id=?",
+                                    (new_arr, int(id_)),
+                                )
 
-                        #countslock.acquire(blocking=True,
-                        #                   delay=np.random.uniform(0.008, 0.015),
-                        #                   max_delay=np.random.uniform(0.1, 0.5),
-                        #                   timeout=120)
-                        #with h5py.File(self.counts, mode='r+') as io5:
-                        #    for rownum in range(res.counts.shape[0]):
-                        #        io5["counts"][sim_idxs[(job+rownum)], :] = res.counts[rownum]
-                        #        #io5["counts"][job:job + self.chunksize, :] = res.counts
-                        #countslock.release()
+                            con.commit()
+                        finally:
+                            con.close()
 
-                        con.commit()
-                        con.close()
+                        # Mark each chunk complete immediately after its counts
+                        # transaction commits. This preserves completed work if a
+                        # later chunk fails or the parent process is interrupted.
+                        self._set_simulation_status(
+                            row_ids, self.COMPLETE, only_if=self.RESERVED
+                        )
 
                         # free up memory from job
                         del rasyncs[job]
 
                     else:
-                        raise SimcatError(rasync.get())
+                        try:
+                            rasync.get()
+                        except Exception as exc:
+                            raise SimcatError(
+                                "Simulation failed for row IDs "
+                                f"{row_ids.tolist()}: {exc}"
+                            ) from exc
+                        raise SimcatError(
+                            f"Simulation failed for row IDs {row_ids.tolist()}."
+                        )
 
                 # print progress
                 progress.increment_time()
@@ -191,30 +328,43 @@ class Simulator:
                     break
                 else:
                     time.sleep(0.5)
-            labslock.acquire(blocking=True,
-                             delay=np.random.uniform(0.008, 0.015),
-                             max_delay=np.random.uniform(0.1, 0.5),
-                             timeout=60)
-            with h5py.File(self.labels, 'r+') as i5:
-                finished_sims = i5['finished_sims']
-                for sim_idx in sim_idxs:
-                    finished_sims[sim_idx] = 1
-            labslock.release()
-
             # on success: close the progress counter
             progress.widget.close()
-            print(
-                "completed {} simulations in {}."
-                .format(nsims, progress.elapsed)
-            )
+            if not self._quiet:
+                print(
+                    "completed {} simulations in {}."
+                    .format(nsims_reserved, progress.elapsed)
+                )
+            return nsims_reserved
 
         finally:
-            # close the hdf5 handle
-            #io5.close()
-            pass
+            # Any row not already committed is safe to retry. Conditional
+            # updates avoid reverting chunks that completed successfully.
+            self._set_simulation_status(
+                sim_idxs, self.PENDING, only_if=self.RESERVED
+            )
+            if progress is not None:
+                progress.widget.close()
 
 
-    def run(self, nsims=None, force=True, ipyclient=None, show_cluster=False, auto=False):
+    def run(
+        self,
+        nsims=None,
+        force=True,
+        ipyclient=None,
+        show_cluster=False,
+        auto=False,
+        recover=False,
+    ):
+        """Run pending simulations through an ipyparallel client.
+
+        ``force`` is retained for API compatibility and has no effect. Set
+        ``recover=True`` only when no other process is using the database to
+        release reservations left by a hard interruption.
+        """
+        del force
+        if recover:
+            self.recover()
         pool=Parallel(
             tool=self,
             rkwargs={'nsims': nsims},
@@ -223,7 +373,7 @@ class Simulator:
             auto=auto,
             quiet=self._quiet
             )
-        pool.wrap_run()
+        return pool.wrap_run()
 
 
 #    def join_queue(self, filename, writedir='.'):

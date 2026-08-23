@@ -1,21 +1,26 @@
-#!/usr/bin/env
+"""Public API for simcat.
 
-# imports
+TensorFlow is intentionally imported only when ``BatchTrain`` is requested.
+"""
 
-from .Database import Database    # BUILDS THE DATABASE OF LABELS
-from .Analysis import Analysis          # POST-SIM ANALYSIS
+from .Database import Database
 from .Simulator import Simulator
 from . import plot
-#from .BatchTrain import BatchTrain            #
+
+__all__ = ["BatchTrain", "Database", "Simulator", "plot"]
+
+
 def __getattr__(name):
     if name == "BatchTrain":
-        # Import BatchTrain (and thus TensorFlow) only when accessed
-        from .BatchTrain import BatchTrain
-        return BatchTrain
-    raise AttributeError(f"module {__name__} has no attribute {name}")
+        # Import BatchTrain (and thus TensorFlow) only when accessed. Assigning
+        # the class here also replaces the package attribute that Python creates
+        # temporarily for the imported ``simcat.BatchTrain`` submodule.
+        from .BatchTrain import BatchTrain as batch_train_class
+
+        globals()[name] = batch_train_class
+        return batch_train_class
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-
-# dunders
-__version__ = "0.0.6"
+__version__ = "0.0.7"
 __authors__ = "Patrick McKenzie and Deren Eaton"

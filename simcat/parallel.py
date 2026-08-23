@@ -89,8 +89,9 @@ class Parallel(object):
             "--engines={}".format(self.tool.ipcluster["engines"]),
             "--profile={}".format(self.tool.ipcluster["profile"]),
             "--n={}".format(self.tool.ipcluster["cores"]),
-            "{}".format(iparg),
         ]
+        if iparg:
+            standard.append(iparg)
 
         # wrap ipcluster start
         try:
@@ -123,9 +124,10 @@ class Parallel(object):
                 raise
 
         except Exception as inst:
-            sys.exit(
+            raise SimcatError(
                 "Error launching ipcluster for parallelization:\n({})\n"
-                .format(inst))
+                .format(inst)
+            ) from inst
 
 
 
@@ -152,13 +154,16 @@ class Parallel(object):
                 "cluster_id": self.tool.ipcluster["cluster_id"],            
             }
             ipyclient = ipp.Client(**args)
+            # Store immediately so wrap_run.cleanup() can shut down an
+            # auto-launched controller even if no engine registers in time.
+            self.ipyclient = ipyclient
 
             # restore std printing now that Client print statement has passed
             # sys.stdout = save_stdout
             # sys.stderr = save_stderr
 
-            # allow time to find the connection; count cores to break
-            for _ in range(6000):
+            deadline = time.monotonic() + self.tool.ipcluster["timeout"]
+            while time.monotonic() < deadline:
 
                 # how many cores can we find right now?
                 ncores = len(ipyclient)
@@ -169,8 +174,7 @@ class Parallel(object):
 
                 # are all cores found yet? if so, break.
                 if self.tool.ipcluster["cores"]:
-                    time.sleep(0.1)
-                    if ncores == self.tool.ipcluster["cores"]:
+                    if ncores >= self.tool.ipcluster["cores"]:
                         break
 
                 # If MPI and not all found, break if no more found in 3 secs
@@ -186,6 +190,13 @@ class Parallel(object):
                     if ncores:
                         time.sleep(0.5)
                         break
+                time.sleep(0.1)
+
+            if not len(ipyclient):
+                raise SimcatError(
+                    "No ipyparallel engines registered within "
+                    f"{self.tool.ipcluster['timeout']} seconds."
+                )
 
         except KeyboardInterrupt as inst:
             raise inst
@@ -247,6 +258,7 @@ class Parallel(object):
         running one. The ipyclient arg overrides the auto arg.
         """
 
+        result = None
         try:
             # check that ipyclient is connected (3 seconds tries)
             if self.ipyclient:
@@ -282,7 +294,7 @@ class Parallel(object):
 
             # run the job
             if not dry_run:
-                self.tool._run(
+                result = self.tool._run(
                     **self.rkwargs,
                     ipyclient=self.ipyclient,
                     children=[self.message],
@@ -299,6 +311,7 @@ class Parallel(object):
         # cancel/kill any unfinished jobs and shutdown hub if 'auto=True'
         finally:           
             self.cleanup()
+        return result
 
 
     def cleanup(self):

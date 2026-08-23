@@ -12,6 +12,7 @@ import pandas as pd
 import sqlite3
 import io
 import itertools
+import tempfile
 
 #from simcat.utils import get_snps_count_matrix
 from tensorflow.keras.utils import to_categorical
@@ -20,8 +21,9 @@ from tensorflow.keras.utils import Sequence
 from tensorflow.keras.layers import Dense, Dropout, concatenate
 from tensorflow.keras import Input, Model
 import tensorflow as tf
-tf.config.run_functions_eagerly(True)
 from numba import njit
+
+from .utils import SimcatError
 
 class BatchTrain:
     def __init__(self,
@@ -35,6 +37,7 @@ class BatchTrain:
                  to_zero_magnitude=0,
                  directionality=True,
                  exclude_mask=None,
+                 seed=None,
                  ):
         '''
         exclude_mask: np.array (bool).
@@ -50,6 +53,22 @@ class BatchTrain:
         self.exclude_magnitude = exclude_magnitude
         self.to_zero_magnitude = to_zero_magnitude
         self.directionality = directionality
+        self.exclude_mask = exclude_mask
+        self.seed = seed
+
+        if not 0 < prop_training < 1:
+            raise ValueError("prop_training must be strictly between 0 and 1")
+        if exclude_magnitude < 0:
+            raise ValueError("exclude_magnitude must be non-negative")
+        if to_zero_magnitude:
+            raise NotImplementedError(
+                "to_zero_magnitude is not implemented in simcat 0.0.7; "
+                "use zero to preserve published category semantics"
+            )
+        if not directionality:
+            raise NotImplementedError(
+                "directionality=False is not implemented in simcat 0.0.7"
+            )
 
         self.model = None
         self.newick = None
@@ -58,52 +77,136 @@ class BatchTrain:
         self.counts_filepath = os.path.join(directory, input_name+'.counts.h5')
         self.labs_filepath = os.path.join(directory, input_name+'.labels.h5')
 
-        if not os.path.exists(self.counts_filepath):
-            if os.path.exists(os.path.join(directory, input_name+'.counts.db')):
-                print("hdf5 counts file does not yet exist. Converting SQL database to hdf5...")
-                self.write_sql_counts_to_h5()
+        if not os.path.exists(self.labs_filepath):
+            raise FileNotFoundError(
+                f"Labels database not found: {self.labs_filepath}"
+            )
+        sql_path = os.path.join(directory, input_name + ".counts.db")
+        if os.path.exists(sql_path) and self._counts_need_sync(sql_path):
+            print("Synchronizing simulated counts from SQLite to HDF5...")
+            self.write_sql_counts_to_h5()
+        elif not os.path.exists(self.counts_filepath):
+            raise FileNotFoundError(
+                "Counts data were not found. Expected either "
+                f"{self.counts_filepath} or {sql_path}."
+            )
 
         self.analysis_filepath = os.path.join(self.directory,self.output_name+'.analysis.h5')
         if not os.path.exists(self.analysis_filepath):
             self.write_ref_files()
         else:
+            self._validate_analysis_completion_state()
             self.load()
 
+    def _validate_analysis_completion_state(self):
+        """Reject a split file made before newly completed simulations."""
+        with h5py.File(self.analysis_filepath, "r") as analysis:
+            recorded = analysis.attrs.get("completed_simulations")
+        if recorded is None:
+            # Legacy analysis artifacts did not record this value. Preserve
+            # their load behavior; Phase 2 will provide explicit migration.
+            return
+        with h5py.File(self.labs_filepath, "r") as labels:
+            current = int(
+                np.count_nonzero(np.asarray(labels["finished_sims"]) == 1)
+            )
+        if int(recorded) != current:
+            raise SimcatError(
+                f"Analysis metadata records {int(recorded)} completed "
+                f"simulations, but the labels database now has {current}. "
+                "Choose a new output_name or remove the stale analysis/model "
+                "artifacts before creating a new training split."
+            )
+
+    def _counts_need_sync(self, sql_path):
+        """Return whether the training HDF5 is absent or older than SQLite."""
+        if not os.path.exists(self.counts_filepath):
+            return True
+        try:
+            with h5py.File(self.counts_filepath, "r") as countsfile:
+                synchronized = bool(
+                    countsfile.attrs.get("sqlite_synchronized", False)
+                )
+                recorded_mtime = int(
+                    countsfile.attrs.get("sqlite_mtime_ns", -1)
+                )
+        except OSError:
+            return True
+        return (
+            not synchronized
+            or recorded_mtime != os.stat(sql_path).st_mtime_ns
+        )
+
+
     def write_sql_counts_to_h5(self):
+        """Atomically synchronize SQLite simulation arrays to training HDF5."""
         sql_path = os.path.join(self.directory, self.input_name+'.counts.db')
-        labsfile = h5py.File(self.labs_filepath,'r')
-        num_full_dat = labsfile['finished_sims'].shape[0]
-        labsfile.close()
+        with h5py.File(self.labs_filepath, "r") as labsfile:
+            num_full_dat = labsfile["finished_sims"].shape[0]
+            finished_states = np.asarray(labsfile["finished_sims"])
+            countshape = (
+                int(labsfile.attrs["ntips"]),
+                int(labsfile.attrs["nsnps"]),
+            )
+            metadata = dict(labsfile.attrs.items())
 
-        # get the alignment shape
-        con = sqlite3.connect(sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
-        cur = con.cursor()
-
-        cur.execute("select arr from counts where id={}".format(0))
-        data = cur.fetchone()
-        countshape = data[0].shape
-
-        con.close()
-
-        o5 = h5py.File(self.counts_filepath, mode='w')
-        o5.create_dataset(name="counts",
-                          shape=(num_full_dat,
-                                 countshape[0],
-                                 countshape[1]),
-                          dtype=np.int64)
-
-        con = sqlite3.connect(sql_path, detect_types=sqlite3.PARSE_DECLTYPES)
-        cur = con.cursor()
-
-        for simulation_number in range(num_full_dat):
-            cur.execute("select arr from counts where id={}".format(simulation_number))
-            data = cur.fetchone()
-            o5['counts'][simulation_number] = data[0]
-            #converted = convert_array(data[0])
-            #o5['counts'][simulation_number] = converted
-
-        con.close()
-        o5.close()
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f".{self.input_name}.counts-",
+            suffix=".h5.tmp",
+            dir=self.directory,
+        )
+        os.close(fd)
+        try:
+            con = sqlite3.connect(
+                sql_path, detect_types=sqlite3.PARSE_DECLTYPES
+            )
+            try:
+                cur = con.cursor()
+                with h5py.File(temp_path, mode="w") as out:
+                    counts = out.create_dataset(
+                        name="counts",
+                        shape=(num_full_dat, *countshape),
+                        dtype=np.int64,
+                        compression="gzip",
+                    )
+                    for key, value in metadata.items():
+                        out.attrs[key] = value
+                    for simulation_number in range(num_full_dat):
+                        cur.execute(
+                            "select arr from counts where id=?",
+                            (simulation_number,),
+                        )
+                        data = cur.fetchone()
+                        if data is None:
+                            raise SimcatError(
+                                "SQLite counts table is missing row "
+                                f"{simulation_number}."
+                            )
+                        if data[0] is None:
+                            if finished_states[simulation_number] == 1:
+                                raise SimcatError(
+                                    "Simulation row "
+                                    f"{simulation_number} is marked complete "
+                                    "but has no SQLite counts array."
+                                )
+                            # HDF5 datasets are zero-filled by default; pending
+                            # and reserved rows are excluded from training.
+                            continue
+                        array = np.asarray(data[0])
+                        if array.shape != countshape:
+                            raise SimcatError(
+                                f"Counts row {simulation_number} has shape "
+                                f"{array.shape}; expected {countshape}."
+                            )
+                        counts[simulation_number] = array
+                    out.attrs["sqlite_synchronized"] = True
+                    out.attrs["sqlite_mtime_ns"] = os.stat(sql_path).st_mtime_ns
+            finally:
+                con.close()
+            os.replace(temp_path, self.counts_filepath)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
 
     def write_ref_files(self):
@@ -127,7 +230,11 @@ class BatchTrain:
         all_viable_idxs = np.array(range(num_full_dat))
 
         # which ones are unfinished?
-        is_unfinished_bool = ~np.array(labsfile['finished_sims']).astype(bool)
+        finished_states = np.asarray(labsfile['finished_sims'])
+        is_unfinished_bool = finished_states != 1
+        completed_simulations = int(
+            np.count_nonzero(finished_states == 1)
+        )
 
         # if exlcuding sisters, which are sisters?
         if self.exclude_sisters:
@@ -138,19 +245,40 @@ class BatchTrain:
         # if excluding under a magnitude, which are under that magnitude?
         exclude_mag_bool = labsfile['admixture'][:, self.admixture_row, 3] < self.exclude_magnitude
 
-        keeper_idxs_mask = ~(is_unfinished_bool + is_sister_bool + exclude_mag_bool)
+        keeper_idxs_mask = ~(
+            is_unfinished_bool | is_sister_bool | exclude_mag_bool
+        )
+        if self.exclude_mask is not None:
+            exclude_mask = np.asarray(self.exclude_mask, dtype=bool)
+            if exclude_mask.shape != (num_full_dat,):
+                raise ValueError(
+                    "exclude_mask must have one boolean value per simulation"
+                )
+            keeper_idxs_mask &= ~exclude_mask
 
         all_viable_idxs = all_viable_idxs[keeper_idxs_mask]
 
         num_viable = len(all_viable_idxs)
-        num_training = int(num_viable*self.prop_training)
+        if num_viable < 2:
+            labsfile.close()
+            raise SimcatError(
+                "At least two completed simulations compatible with the "
+                "filters are required for training and validation."
+            )
+        num_training = min(
+            max(int(num_viable * self.prop_training), 1),
+            num_viable - 1,
+        )
         self.num_training = num_training
         self.num_testing = num_viable - num_training
 
         print(str(num_viable) + " total simulations compatible with parameters.")
         print("Data split into " + str(self.num_training) + " training and " + str(self.num_testing) + " testing simulations.")
 
-        training_idxs = np.sort(np.random.choice(all_viable_idxs,num_training,replace=False))
+        random = np.random.RandomState(self.seed)
+        training_idxs = np.sort(
+            random.choice(all_viable_idxs, num_training, replace=False)
+        )
         testing_idxs = np.sort(np.array(list(set(all_viable_idxs).difference(set(training_idxs)))))
 
         self.analysis_filepath = os.path.join(self.directory,self.output_name+'.analysis.h5')
@@ -196,6 +324,8 @@ class BatchTrain:
         an_file.attrs['num_testing'] = self.num_testing
         an_file.attrs['newick'] = self.newick
         an_file.attrs['nquarts'] = self.nquarts
+        an_file.attrs['seed'] = -1 if self.seed is None else int(self.seed)
+        an_file.attrs['completed_simulations'] = completed_simulations
 
         an_file.close()
         labsfile.close()
@@ -208,21 +338,29 @@ class BatchTrain:
         self.onehot_dict_path = os.path.join(self.directory,self.output_name+'.onehot_dict.csv')
 
         # load in attributes
-        an_file = h5py.File(self.analysis_filepath,'r')
-        self.num_classes = an_file.attrs['num_classes']
-        self.input_shape = an_file.attrs['input_shape']
-        self.prop_training = an_file.attrs['prop_training']
-        self.exclude_sisters = an_file.attrs['exclude_sisters']
-        self.exclude_magnitude = an_file.attrs['exclude_magnitude']
-        self.to_zero_magnitude = an_file.attrs['to_zero_magnitude']
-        self.directionality = an_file.attrs['directionality']
-        self.num_training = an_file.attrs['num_training']
-        self.num_testing = an_file.attrs['num_testing']
-        self.newick = an_file.attrs['newick']
-        self.nquarts = an_file.attrs['nquarts']
+        with h5py.File(self.analysis_filepath, 'r') as an_file:
+            self.num_classes = an_file.attrs['num_classes']
+            self.input_shape = an_file.attrs['input_shape']
+            self.prop_training = an_file.attrs['prop_training']
+            self.exclude_sisters = an_file.attrs['exclude_sisters']
+            self.exclude_magnitude = an_file.attrs['exclude_magnitude']
+            self.to_zero_magnitude = an_file.attrs['to_zero_magnitude']
+            self.directionality = an_file.attrs['directionality']
+            self.num_training = an_file.attrs['num_training']
+            self.num_testing = an_file.attrs['num_testing']
+            self.newick = an_file.attrs['newick']
+            self.nquarts = an_file.attrs['nquarts']
+            stored_seed = int(an_file.attrs.get('seed', -1))
+            self.seed = None if stored_seed == -1 else stored_seed
 
 
     def init_model(self, dropout=True, extra_layer=False, force=False, save=True):
+        if self.num_classes < 2:
+            raise SimcatError(
+                "At least two edge categories are required to initialize a model."
+            )
+        if self.seed is not None:
+            tf.keras.utils.set_random_seed(self.seed)
         self.model_path = os.path.join(self.directory, self.output_name + ".model.h5")
         if not os.path.exists(self.model_path) or force:
             nnodes_per_quart = 8  # or make this tunable later
@@ -260,7 +398,7 @@ class BatchTrain:
         if os.path.exists(self.model_path):
             print("Loading existing neural network:", self.model_path)
             self.model = load_model(self.model_path)
-            
+
             # Always explicitly recompile after loading
             self.model.compile(loss='categorical_crossentropy',
                                optimizer='adam',
@@ -268,7 +406,16 @@ class BatchTrain:
         else:
             raise FileNotFoundError("Model file not found. Use `init_model()` to create one.")
 
-    def train(self, batch_size, num_epochs):        
+    def train(self, batch_size, num_epochs):
+        if self.model is None:
+            raise SimcatError(
+                "No neural network is loaded. Call init_model() for a new "
+                "model or load_model() for an existing model before train()."
+            )
+        if int(batch_size) != batch_size or batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer")
+        if int(num_epochs) != num_epochs or num_epochs <= 0:
+            raise ValueError("num_epochs must be a positive integer")
         with h5py.File(self.analysis_filepath, 'r') as an_file:
             training_ids = an_file['training'][:]
             testing_ids = an_file['testing'][:]
@@ -283,7 +430,7 @@ class BatchTrain:
             raw_counts = counts_h5['counts'][sample_id]
             processed = get_snps_count_matrix(tree, raw_counts)
             processed = processed.reshape(self.nquarts, -1).astype('float32')
-            processed /= processed.max(axis=1, keepdims=True)
+            processed = _normalize_count_matrices(processed)
             label = to_categorical(labels_dict[sample_id], num_classes=n_classes)
             return tuple([processed[i] for i in range(self.nquarts)] + [label])
 
@@ -307,31 +454,58 @@ class BatchTrain:
                   .batch(batch_size)
                   .prefetch(tf.data.AUTOTUNE))
 
-        self.model.fit(ds_train, epochs=num_epochs, validation_data=ds_val, verbose=1)
-
-        counts_h5.close()
+        try:
+            history = self.model.fit(
+                ds_train,
+                epochs=int(num_epochs),
+                validation_data=ds_val,
+                verbose=1,
+            )
+        finally:
+            counts_h5.close()
 
         # Explicitly save updated model
         self.model.save(self.model_path)
         print("Model trained and saved to:", self.model_path)
+        return history
 
     def _format_alignment_for_model(self, alignment):
         '''
         Formatting an alignment of unlinked SNP data for neural net
         Alignment rows MUST match the order in the simcat database (ie from the tree)
-        (This order is alphabetical from tip names)
         '''
+        alignment = np.asarray(alignment)
+        tree = toytree.tree(self.newick)
+        if alignment.ndim != 2:
+            raise ValueError("alignment must be a two-dimensional array")
+        if alignment.shape[0] != tree.ntips:
+            raise ValueError(
+                f"alignment has {alignment.shape[0]} rows; expected "
+                f"{tree.ntips} rows in tree-tip order"
+            )
+        if alignment.shape[1] == 0:
+            raise ValueError("alignment must contain at least one SNP")
+        if not np.issubdtype(alignment.dtype, np.integer):
+            raise ValueError("alignment allele codes must be integers from 0 to 3")
+        if np.any((alignment < 0) | (alignment > 3)):
+            raise ValueError("alignment allele codes must be integers from 0 to 3")
+
         # format in quartet matrices
-        mat = np.array([get_snps_count_matrix(toytree.tree(self.newick), alignment)])[0]
+        mat = get_snps_count_matrix(tree, alignment)
         # reshape it to combine the 16x16 part
-        mat = mat.reshape(mat.shape[0],1,-1)
-        mat = mat / np.max(mat,axis=2)[:,np.newaxis]
+        mat = mat.reshape(mat.shape[0], 1, -1).astype("float32")
+        mat = _normalize_count_matrices(mat)
         # make a dictionary giving each separate quartet matrix an input name
         # and reshaping it the way keras likes (ie with a row dimension)
         counts_dict = {"input_" + str(quart+1): mat[quart] for quart in range(len(mat))}
         return(counts_dict)
 
     def predict_from_alignment(self, alignment):
+        if self.model is None:
+            raise SimcatError(
+                "No neural network is loaded. Call load_model() or "
+                "init_model() before prediction."
+            )
         # format the alignment for the model
         count_dict = self._format_alignment_for_model(alignment)
 
@@ -353,7 +527,21 @@ def convert_array(text):
     '''
     out = io.BytesIO(text)
     out.seek(0)
-    return np.load(out)
+    return np.load(out, allow_pickle=False)
+
+
+sqlite3.register_converter("array", convert_array)
+
+
+def _normalize_count_matrices(matrices):
+    """Apply the published per-quartet max normalization with zero guards."""
+    matrices = np.asarray(matrices, dtype=np.float32)
+    maxima = matrices.max(axis=-1, keepdims=True)
+    if np.any(maxima <= 0):
+        raise SimcatError(
+            "A quartet count matrix is empty and cannot be normalized."
+        )
+    return matrices / maxima
 
 def get_sister_idxs(tre):
     sisters = []

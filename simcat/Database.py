@@ -10,7 +10,6 @@ from builtins import range
 
 import os
 import h5py
-import time
 import itertools as itt
 import toytree
 import numpy as np
@@ -35,7 +34,7 @@ def adapt_array(arr):
 def convert_array(text):
     out = io.BytesIO(text)
     out.seek(0)
-    return np.load(out)
+    return np.load(out, allow_pickle=False)
 
 
 # Converts np.array to TEXT when inserting
@@ -60,8 +59,8 @@ class Database:
         The name that will be used in the saved database file (<name>.hdf5)
 
     workdir: str
-        The location where the database file will be saved, or loaded from
-        if continuing an analysis from a checkpoint.
+        The location where new database artifacts will be saved. Existing
+        artifacts are protected unless ``force=True`` is supplied.
 
     tree: newick or toytree
         A fixed topology to use for all simulations. Edge lengths are fixed
@@ -69,16 +68,16 @@ class Database:
         are drawn from a distribution.
 
     Ne_min: int (default=1e4)
-        Effective population size (Ne) minimum value sampled randomly 
+        Effective population size (Ne) minimum value sampled randomly
         across ntests.
 
     Ne_max: int (default=1e5)
-        Effective population size (Ne) maximum value sampled randomly 
+        Effective population size (Ne) maximum value sampled randomly
         across ntests.
 
-    existing_admix_edges: list (default=list())
-        This should be a list of tuples. Each tuple should have two integers: a 
-        source edge and a destination edge. 
+    existing_admix_edges: list (default=None)
+        This should be a list of tuples. Each tuple should have two integers: a
+        source edge and a destination edge.
 
     nedges: int (default=0)
         The number of admixture edges to add to each tree at a time. All edges
@@ -125,7 +124,7 @@ class Database:
         tree,
         nrows=100,
         nsnps=20000,
-        existing_admix_edges=list(),
+        existing_admix_edges=None,
         Ne_min=10000,
         Ne_max=100000,
         admix_prop_min=0.05,
@@ -141,52 +140,106 @@ class Database:
         quiet=False,
         ):
 
-        # init random seed generator
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("name must be a non-empty string")
+        if int(nrows) != nrows or nrows <= 0:
+            raise ValueError("nrows must be a positive integer")
+        if int(nsnps) != nsnps or nsnps <= 0:
+            raise ValueError("nsnps must be a positive integer")
+        if Ne_min <= 0 or Ne_max < Ne_min:
+            raise ValueError("Ne values must satisfy 0 < Ne_min <= Ne_max")
+        if not 0 <= admix_prop_min <= admix_prop_max <= 1:
+            raise ValueError(
+                "admixture proportions must satisfy "
+                "0 <= admix_prop_min <= admix_prop_max <= 1"
+            )
+        if not 0 <= admix_edge_min <= admix_edge_max <= 1:
+            raise ValueError(
+                "admixture edge positions must satisfy "
+                "0 <= admix_edge_min <= admix_edge_max <= 1"
+            )
+        if not 0 <= node_slide_prop <= 1:
+            raise ValueError("node_slide_prop must be between 0 and 1")
+
+        # init random seed generator. All parameter sampling below uses this
+        # object so that a supplied seed controls the complete labels database.
         self.random = np.random.RandomState(seed)
+        self.seed = seed
 
         # database locations
         self.name = name
-        self.workdir = (
-            workdir if workdir else os.path.realpath("./databases"))
-        if not os.path.exists(workdir):
-            os.makedirs(workdir)
+        self.workdir = os.path.realpath(
+            os.fspath(workdir) if workdir is not None else "./databases"
+        )
+        os.makedirs(self.workdir, exist_ok=True)
 
         # labels data file
         self.labels = os.path.realpath(
-            os.path.join(workdir, "{}.labels.h5".format(self.name)))
+            os.path.join(self.workdir, "{}.labels.h5".format(self.name)))
         # counts data file
         self.counts = os.path.realpath(
-            os.path.join(workdir, "{}.counts.h5".format(self.name)))
+            os.path.join(self.workdir, "{}.counts.h5".format(self.name)))
         # sql counts data file
         self.sqldb = os.path.realpath(
-            os.path.join(workdir, "{}.counts.db".format(self.name)))
+            os.path.join(self.workdir, "{}.counts.db".format(self.name)))
         self.checkpoint = 0
         self._quiet = quiet
 
         # store params
-        self.tree = (
-            toytree.tree(tree) if isinstance(tree, str) else tree.copy())
+        self.tree = toytree.tree(tree) if isinstance(tree, str) else tree.copy()
 
         # deal with imprecision issues by writing the newick and then converting
         # to ultrametric
         self.tree = toytree.tree(self.tree.write())
         self.tree = self.tree.mod.edges_extend_tips_to_align()
-        
-        self.existing_admix_edges = existing_admix_edges
+
+        self.existing_admix_edges = [
+            tuple(int(node) for node in edge)
+            for edge in (existing_admix_edges or [])
+        ]
+        if any(len(edge) != 2 for edge in self.existing_admix_edges):
+            raise ValueError(
+                "existing_admix_edges must contain (source, destination) pairs"
+            )
         self.Ne_min = Ne_min
         self.Ne_max = Ne_max
         self.inodes = self.tree.nnodes - self.tree.ntips
         self.node_slide_prop = node_slide_prop
-        
-        self.nrows = nrows
+
+        self.nrows = int(nrows)
 
         self.admix_edge_min = admix_edge_min
         self.admix_edge_max = admix_edge_max
         self.admix_prop_min = admix_prop_min
         self.admix_prop_max = admix_prop_max
         self.exclude_sisters = exclude_sisters
-        self.rate_vector = rate_vector
-        self.pi_vector = pi_vector
+        rates = np.asarray(rate_vector, dtype=float)
+        frequencies = np.asarray(pi_vector, dtype=float)
+        rates_missing = np.all(np.isnan(rates))
+        frequencies_missing = np.all(np.isnan(frequencies))
+        if rates_missing != frequencies_missing:
+            raise ValueError(
+                "rate_vector and pi_vector must either both be supplied or "
+                "both be omitted for JC69"
+            )
+        if rates_missing:
+            self.rate_vector = np.nan
+            self.pi_vector = np.nan
+        else:
+            if rates.shape != (6,) or not np.all(np.isfinite(rates)):
+                raise ValueError("rate_vector must contain six finite GTR rates")
+            if frequencies.shape != (4,) or not np.all(
+                np.isfinite(frequencies)
+            ):
+                raise ValueError(
+                    "pi_vector must contain four finite base frequencies"
+                )
+            if np.any(rates <= 0) or np.any(frequencies <= 0):
+                raise ValueError("GTR rates and base frequencies must be positive")
+            if not np.isclose(frequencies.sum(), 1.0):
+                raise ValueError("pi_vector base frequencies must sum to one")
+            self.rate_vector = rates
+            self.pi_vector = frequencies
         # vary the height!
         self.heightmax = self.tree.treenode.height * 1.5
         self.heightmin = self.tree.treenode.height * 0.5
@@ -194,15 +247,19 @@ class Database:
         # database label combinations
         self.nedges = len(self.existing_admix_edges)+1
         self.nnes = 1  # n_sampled_Ne
-        self.nsnps = nsnps
-        self.nquarts = sum(1 for i in itt.combinations(range(tree.ntips), 4))
+        self.nsnps = int(nsnps)
+        if self.tree.ntips < 4:
+            raise ValueError("tree must contain at least four tips")
+        self.nquarts = sum(
+            1 for _ in itt.combinations(range(self.tree.ntips), 4)
+        )
 
         # get number of places to put admix edges on THIS tree. If node slider
-        # is on then we might observe other edges, in which case there will 
+        # is on then we might observe other edges, in which case there will
         # just be fewer of these edges in that 'test'. In each test the order
         # of placement of admix edges will be random so that node slide admix
-        # edges that get added can be worked in without changing the total 
-        # number of tests. 
+        # edges that get added can be worked in without changing the total
+        # number of tests.
         args = (self.tree, 0.5, 0.5, self.exclude_sisters)
         admixedges = get_all_admix_edges(*args)
         self.aedges = [self.existing_admix_edges + [i] for i in list(admixedges.keys())]
@@ -212,7 +269,7 @@ class Database:
         # create or clear the database for writing
         self.init_databases(force)
 
-        # print to user a progress report 
+        # print to user a progress report
         if not self._quiet:
             shortpath = self.labels
             if os.path.abspath("..") in shortpath:
@@ -250,7 +307,7 @@ class Database:
         """
         print(self.nstored_labels)
         with h5py.File(self.labels) as io5:
-            for key in io5.keys:
+            for key in io5.keys():
                 print(key, io5[key].shape)
 
         with h5py.File(self.counts) as io5:
@@ -266,21 +323,27 @@ class Database:
 
         Expect that the h5 file self._db is open in w or a mode.
         """
-        # create database in 'w-' mode to prevent overwriting
-        if not os.path.exists(self.labels):
-            i5 = h5py.File(self.labels, mode='w')
-            o5 = h5py.File(self.counts, mode='w')
-            con = sqlite3.connect(self.sqldb, detect_types=sqlite3.PARSE_DECLTYPES)
-            cur = con.cursor()
-            cur.execute("create table counts (id integer PRIMARY KEY, arr array)")
-        else:
-            if force:
-                i5 = h5py.File(self.labels, mode='w')
-                o5 = h5py.File(self.counts, mode='w')
-            else:
-                return 
-                # i5 = h5py.File(self.labels, mode='a')
-                # o5 = h5py.File(self.counts, mode='a')
+        artifacts = [self.labels, self.counts, self.sqldb]
+        existing = [path for path in artifacts if os.path.exists(path)]
+        if existing and not force:
+            joined = "\n  - ".join(existing)
+            raise FileExistsError(
+                "Refusing to overwrite existing database artifacts:\n"
+                f"  - {joined}\n"
+                "Choose a new name/workdir or pass force=True."
+            )
+        if force:
+            for path in artifacts:
+                if os.path.exists(path):
+                    os.remove(path)
+
+        con = sqlite3.connect(
+            self.sqldb, detect_types=sqlite3.PARSE_DECLTYPES
+        )
+        cur = con.cursor()
+        cur.execute("create table counts (id integer PRIMARY KEY, arr array)")
+        i5 = h5py.File(self.labels, mode="w-")
+        o5 = h5py.File(self.counts, mode="w-")
 
         # store some database attribute info
         i5.attrs["tree"] = self.tree.write()
@@ -297,8 +360,12 @@ class Database:
         o5.attrs["rate_vector"] = self.rate_vector
         i5.attrs["pi_vector"] = self.pi_vector
         o5.attrs["pi_vector"] = self.pi_vector
+        i5.attrs["seed"] = -1 if self.seed is None else int(self.seed)
+        o5.attrs["seed"] = -1 if self.seed is None else int(self.seed)
+        i5.attrs["pending_counts_are_null"] = True
+        o5.attrs["sqlite_synchronized"] = False
 
-        # store data in separate dsets and with matrix shape so that in the 
+        # store data in separate dsets and with matrix shape so that in the
         # analysis we can best take advantage of different combinations of the
         # data and its structure.
         smat = (self.nstored_labels, self.tree.ntips, self.nsnps)
@@ -307,12 +374,14 @@ class Database:
         # countsize = (self.nstored_labels, snps + svdu + svdv + svds + mvar)
         o5.create_dataset(name="counts", shape=smat, dtype=np.int64, compression="gzip")
 
-        z_a = np.zeros((smat[1], smat[2]), dtype=int)
-        for id_ in range(smat[0]):
-            cur.execute("insert into counts (id, arr) values (?, ?)", (id_, z_a,))
+        # Pending rows do not need a full zero-valued SNP BLOB. SQL NULL keeps
+        # initial databases small; workers replace it atomically with an array.
+        cur.executemany(
+            "insert into counts (id, arr) values (?, NULL)",
+            ((id_,) for id_ in range(smat[0])),
+        )
 
         con.commit()
-        con.close()
 
         # array of node heights,Nes in traverse order (-tips)
         lnodes = (self.nstored_labels, self.inodes)
@@ -333,6 +402,7 @@ class Database:
         # close the files
         i5.close()
         o5.close()
+        con.close()
 
 
 
@@ -342,7 +412,7 @@ class Database:
         """
 
         # arrays to write in chunks to the h5 array
-        chunksize = 10000
+        chunksize = min(10000, self.nrows)
         arr_h = np.zeros((chunksize, self.inodes), dtype=np.int64)
         arr_n = np.zeros((chunksize, self.tree.nnodes), dtype=np.int64)
         arr_a = np.zeros((chunksize, self.nedges, 4), dtype=float)
@@ -353,18 +423,20 @@ class Database:
         wdx = 0
         idx = 0
         for na in range(self.nrows):
-            newheight = np.random.uniform(self.heightmin, self.heightmax)
+            newheight = self.random.uniform(self.heightmin, self.heightmax)
 
             # make it taller! ...or shorter...
             ntree = self.tree.mod.edges_scale_to_root_height(treeheight=newheight)
 
             # wiggle node heights
             prop = self.node_slide_prop
-            slide_seed = self.random.randint(0, 2**32)
+            # Keep seeds within signed 32-bit range for toytree/msprime and
+            # TensorFlow compatibility across supported dependency versions.
+            slide_seed = self.random.randint(0, np.iinfo(np.int32).max)
             ntree = ntree.mod.edges_slider(prop=prop, seed=slide_seed)
 
             # this generates node-specific random Ne values for each sampled Ne
-            popsizes = np.random.uniform(
+            popsizes = self.random.uniform(
                                          self.Ne_min,
                                          self.Ne_max,
                                          (1, self.tree.nnodes)
@@ -379,10 +451,17 @@ class Database:
 
             # keep from picking an edge that's already placed!
             for exedge in self.existing_admix_edges:
-                aedges.remove(exedge)
+                if exedge in aedges:
+                    aedges.remove(exedge)
+
+            if not aedges:
+                raise SimcatError(
+                    "No valid additional admixture edges remain for the sampled "
+                    "tree and exclusion settings."
+                )
 
             # pick random edges up to "rows per test"
-            aes = np.random.randint(0, len(aedges), 1)
+            aes = self.random.randint(0, len(aedges), 1)
             aedges = np.array(aedges)[aes]
 
 #            # iterate over each placement of the edges
@@ -392,17 +471,17 @@ class Database:
             arr_n[idx] = popsizes
             for aidx, exedge in enumerate(self.existing_admix_edges):
                 arr_a[idx, aidx] = (exedge[0], exedge[1],
-                                    np.random.uniform(self.admix_edge_min,
-                                                      self.admix_edge_max),
-                                    np.random.uniform(self.admix_prop_min,
-                                                      self.admix_prop_max))
+                                    self.random.uniform(self.admix_edge_min,
+                                                        self.admix_edge_max),
+                                    self.random.uniform(self.admix_prop_min,
+                                                        self.admix_prop_max))
             arr_a[idx, (self.nedges-1)] = (aedges[0][0],
                                            aedges[0][1],
                                            # here is where the timing is selected
-                                           np.random.uniform(self.admix_edge_min,
-                                                             self.admix_edge_max),
-                                           np.random.uniform(self.admix_prop_min,
-                                                             self.admix_prop_max))
+                                           self.random.uniform(self.admix_edge_min,
+                                                               self.admix_edge_max),
+                                           self.random.uniform(self.admix_prop_min,
+                                                               self.admix_prop_max))
 
             arr_s[idx] = slide_seed
             arr_d[idx] = newheight
