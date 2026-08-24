@@ -1,26 +1,74 @@
-"""Public API for simcat.
+"""Stable public API for simcat.
 
-TensorFlow is intentionally imported only when ``BatchTrain`` is requested.
+Optional simulation, plotting, HPC, and TensorFlow modules are loaded only when
+their public object is requested.
 """
 
-from .Database import Database
-from .Simulator import Simulator
-from . import plot
+from importlib import import_module
+from types import ModuleType
+import sys
 
-__all__ = ["BatchTrain", "Database", "Simulator", "plot"]
+from .config import (
+    DatabaseConfig,
+    ParameterRanges,
+    RNGConfig,
+    StorageConfig,
+    SubstitutionModelConfig,
+    TrainingConfig,
+    TreeConfig,
+)
+
+__version__ = "0.1.0.dev0"
+__authors__ = "Patrick McKenzie and Deren Eaton"
+
+__all__ = [
+    "BatchTrain", "Database", "DatabaseConfig", "ParameterRanges",
+    "RNGConfig", "Simulator", "StorageConfig", "SubstitutionModelConfig",
+    "TrainingConfig", "TreeConfig", "plot",
+]
+
+_LAZY_EXPORTS = {
+    "Database": (".database", "Database"),
+    "Simulator": (".simulator", "Simulator"),
+    "BatchTrain": (".training", "BatchTrain"),
+    "plot": (".plot", None),
+}
 
 
 def __getattr__(name):
-    if name == "BatchTrain":
-        # Import BatchTrain (and thus TensorFlow) only when accessed. Assigning
-        # the class here also replaces the package attribute that Python creates
-        # temporarily for the imported ``simcat.BatchTrain`` submodule.
-        from .BatchTrain import BatchTrain as batch_train_class
+    try:
+        module_name, attribute = _LAZY_EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+    module = import_module(module_name, __name__)
+    value = module if attribute is None else getattr(module, attribute)
+    globals()[name] = value
+    return value
 
-        globals()[name] = batch_train_class
-        return batch_train_class
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))
 
 
-__version__ = "0.0.7"
-__authors__ = "Patrick McKenzie and Deren Eaton"
+class _SimcatModule(ModuleType):
+    """Keep class exports stable after importing deprecated module paths.
+
+    Python normally assigns ``simcat.Database`` to the compatibility module
+    object after ``import simcat.Database``. Intercepting that one ambiguous
+    package lookup preserves the documented top-level class export while the
+    deprecated module itself remains importable.
+    """
+
+    def __getattribute__(self, name):
+        value = super().__getattribute__(name)
+        if name in {"Database", "Simulator", "BatchTrain"} and isinstance(
+            value, ModuleType
+        ):
+            exports = super().__getattribute__("_LAZY_EXPORTS")
+            module_name, attribute = exports[name]
+            value = getattr(import_module(module_name, __name__), attribute)
+            setattr(self, name, value)
+        return value
+
+
+sys.modules[__name__].__class__ = _SimcatModule

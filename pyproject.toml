@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simcat"
+version = "0.1.0.dev0"
+description = "Simulation and machine-learning algorithms for admixture inference"
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+license = {text = "GPL-3.0-only"}
+authors = [
+  {name = "Patrick McKenzie"},
+  {name = "Deren Eaton", email = "de2356@columbia.edu"},
+]
+keywords = ["coalescent", "genomics", "introgression", "invariants"]
+classifiers = [
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+]
+dependencies = [
+  "h5py>=3.10,<4",
+  "numba>=0.57,<1",
+  "numpy>=1.24,<2",
+  "toytree>=3.0.4,<4",
+]
+
+[project.optional-dependencies]
+simulation = [
+  "fasteners>=0.17,<1",
+  "ipcoal>=0.4.dev6,<0.5",
+  "msprime>=1.2,<2",
+]
+plot = ["toyplot>=1,<2"]
+hpc = [
+  "fasteners>=0.17,<1",
+  "ipcoal>=0.4.dev6,<0.5",
+  "ipython>=8.14,<9",
+  "ipyparallel>=9,<10",
+  "ipywidgets>=8,<9",
+  "msprime>=1.2,<2",
+]
+ml = [
+  "pandas>=2,<3",
+  "tensorflow>=2.17,<2.18",
+]
+test = [
+  "build>=1,<2",
+  "pytest>=7,<9",
+  "setuptools>=68",
+  "wheel>=0.41",
+]
+dev = [
+  "build>=1,<2",
+  "fasteners>=0.17,<1",
+  "ipcoal>=0.4.dev6,<0.5",
+  "ipython>=8.14,<9",
+  "ipyparallel>=9,<10",
+  "ipywidgets>=8,<9",
+  "msprime>=1.2,<2",
+  "pandas>=2,<3",
+  "pytest>=7,<9",
+  "setuptools>=68",
+  "tensorflow>=2.17,<2.18",
+  "toyplot>=1,<2",
+  "wheel>=0.41",
+]
+
+[project.urls]
+Homepage = "https://github.com/pmckenz1/simcat"
+Issues = "https://github.com/pmckenz1/simcat/issues"
+
+[project.scripts]
+simcat-artifacts = "simcat.artifacts:main"
+
+[tool.setuptools.packages.find]
+include = ["simcat*"]
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: simulation and TensorFlow integration tests",
+  "simulation: tests requiring the simulation extra",
+  "hpc: tests requiring the HPC extra",
+  "ml: tests requiring the ML extra",
+]

@@ -2,8 +2,15 @@ import numpy as np
 import pytest
 import toytree
 
+pytest.importorskip("fasteners")
+pytest.importorskip("ipcoal")
+pytest.importorskip("msprime")
+
 from simcat import Database, Simulator
 from simcat.utils import SimcatError
+
+
+pytestmark = pytest.mark.simulation
 
 
 def _database(tmp_path, nrows=5):

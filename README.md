@@ -4,8 +4,9 @@
 directional introgression edge on a fixed species-tree topology from unlinked SNP
 site-pattern frequencies.
 
-This is an early research-software release. Version 0.0.7 supports Python 3.10
-and the dependency versions listed in `setup.py`. It should be validated on
+This is an early research-software release. Version 0.1.0.dev0 supports Python
+3.10 and the dependency versions pinned in `constraints/py310-tested.txt`. It
+should be validated on
 simulated data representative of a study before biological interpretation.
 
 ## Installation
@@ -15,13 +16,21 @@ Clone the repository and install it into a new Python 3.10 environment:
 ```bash
 git clone https://github.com/pmckenz1/simcat.git
 cd simcat
-python -m pip install .
+python -m pip install '.[hpc,ml]'
 python -c "import simcat; print(simcat.__version__)"
 ```
 
-The installation includes TensorFlow, ipcoal, msprime, toytree, HDF5,
-ipyparallel, and Jupyter dependencies. TensorFlow is loaded only when
-`simcat.BatchTrain` is first requested, not by a normal `import simcat`.
+The base installation is lightweight. Add `simulation`, `plot`, `hpc`, or `ml`
+only for those workflows; `hpc` includes ipyparallel/Jupyter display support.
+TensorFlow is loaded only when `simcat.BatchTrain` is first requested, not by a
+normal `import simcat`. For the exact tested direct dependency versions, use:
+
+```bash
+python -m pip install -c constraints/py310-tested.txt '.[hpc,ml]'
+```
+
+The supported Python API, extras, schema fields, and compatibility rules are
+defined in [`CONTRACTS.md`](CONTRACTS.md).
 
 ## Workflow
 
@@ -110,7 +119,14 @@ For a run named `quickstart`, simcat creates:
   `BatchTrain` is initialized;
 - `quickstart.analysis.h5` and `quickstart.onehot_dict.csv`: split and category
   metadata; and
-- `quickstart.model.h5`: saved Keras model.
+- `quickstart.model.h5`: saved Keras model; and
+- `quickstart.model.h5.metadata.json`: schema, feature-order, category, seed,
+  configuration, and package-version metadata for that model.
+
+New database and model artifacts use schema version 1. Existing 0.0.6/0.0.7
+artifacts can be inspected without mutation or migrated with
+`python -m simcat.artifacts`; see the exact commands and backup guidance in
+[`CONTRACTS.md`](CONTRACTS.md#legacy-migration).
 
 Do not initialize `BatchTrain` while simulation jobs are still writing. Python
 task failures release their own reserved rows. After a hard process or scheduler
@@ -143,9 +159,10 @@ site-specific command for the target cluster.
 - Softmax outputs are classifier scores and are not calibrated probabilities.
 - Sister-edge inference, multiple samples per species, selection, and robustness
   beyond the simulated training domain are not established.
-- Existing 0.0.6 model/database artifacts should be backed up before reuse. This
-  release retains their filenames and core arrays but adds safety metadata and
-  stricter validation.
+- Existing 0.0.6/0.0.7 model and database artifacts are treated as legacy
+  schema 0. Back them up before running the in-place metadata migration. This
+  release retains their scientific arrays and model format while adding explicit
+  contracts and stricter validation.
 
 ## Citation
 

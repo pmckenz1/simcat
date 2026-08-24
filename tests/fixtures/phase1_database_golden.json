@@ -1,0 +1,15 @@
+{
+  "baseline_commit": "c950cf1",
+  "description": "Phase 1 (simcat 0.0.7) deterministic four-tip labels arrays",
+  "nrows": 5,
+  "nsnps": 12,
+  "seed": 123,
+  "sha256": {
+    "admixture": "743c3029da2690b0dfc06e5c27d797b9d86aab35b68007aa8cdd6c4e5805bbb6",
+    "finished_sims": "2c34ce1df23b838c5abf2a7f6437cca3d3067ed509ff25f11df6b11b582b51eb",
+    "node_Nes": "bab434acd762c9ed2220494d62b04ce11a7115657494a47953be882903a15847",
+    "node_heights": "48e337d8a46557cd367cb5867242062167a6cb011c81d4c710c6c707528a4052",
+    "slide_seeds": "71277054a9a063c01eeef7ab04c8bdcb2ed9b033ff11e2b3e3d394c9fb4a82f1",
+    "treeheight": "4eba3d6700234ed79d35846618ee9b2165ba2e5447271c060b7831f5db2cb062"
+  }
+}

@@ -8,8 +8,6 @@ import h5py
 import os
 import sqlite3
 
-from ipywidgets import IntProgress, HTML, Box
-from IPython.display import display
 from .jitted import count_matrix_int
 
 
@@ -94,6 +92,16 @@ class SimcatError(Exception):
 class Progress(object):
     def __init__(self, njobs, message, children):
 
+        try:
+            from ipywidgets import IntProgress, HTML, Box
+            from IPython.display import display
+        except ImportError as exc:
+            raise ImportError(
+                "Progress displays require the HPC extra; install "
+                "simcat[hpc]."
+            ) from exc
+        self._display = display
+
         # data
         self.njobs = njobs
         self.message = message
@@ -143,7 +151,7 @@ class Progress(object):
         return s1 + inner + s2
 
     def display(self):
-        display(self.widget)
+        self._display(self.widget)
 
     def increment_all(self, value=1):
         self.bar.value += value

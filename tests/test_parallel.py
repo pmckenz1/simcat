@@ -1,7 +1,14 @@
 import pytest
 
+pytest.importorskip("ipyparallel")
+pytest.importorskip("ipywidgets")
+pytest.importorskip("IPython")
+
 from simcat.parallel import Parallel
 from simcat.utils import SimcatError
+
+
+pytestmark = pytest.mark.hpc
 
 
 class _Tool:

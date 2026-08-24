@@ -1,3 +1,5 @@
+import hashlib
+import json
 from pathlib import Path
 import sqlite3
 
@@ -7,6 +9,7 @@ import pytest
 import toytree
 
 from simcat import Database
+from simcat.artifacts import read_database_metadata
 
 
 LABEL_DATASETS = (
@@ -16,6 +19,7 @@ LABEL_DATASETS = (
     "treeheight",
     "admixture",
 )
+GOLDEN_PATH = Path(__file__).parent / "fixtures" / "phase1_database_golden.json"
 
 
 def _make_database(workdir, tree, **kwargs):
@@ -47,6 +51,46 @@ def test_seed_controls_labels_for_tree_object_and_newick(tmp_path):
             "select count(*) from counts where arr is null"
         ).fetchone()[0]
     assert placeholders == 5
+
+
+def test_phase1_label_generation_golden_compatibility(tmp_path):
+    golden = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
+    tree = toytree.rtree.imbtree(ntips=4, treeheight=1e6)
+    database = Database(
+        "golden",
+        tmp_path,
+        tree,
+        nrows=golden["nrows"],
+        nsnps=golden["nsnps"],
+        seed=golden["seed"],
+        quiet=True,
+    )
+    with h5py.File(database.labels, "r") as labels:
+        observed = {
+            name: hashlib.sha256(labels[name][:].tobytes()).hexdigest()
+            for name in golden["sha256"]
+        }
+    assert observed == golden["sha256"]
+
+
+def test_new_database_records_the_schema_contract(tmp_path):
+    tree = toytree.rtree.imbtree(ntips=5, treeheight=1e6)
+    database = _make_database(tmp_path, tree)
+    metadata = read_database_metadata(database.labels, require_current=True)
+    assert metadata["artifact_type"] == "simcat-database"
+    assert metadata["schema_version"] == 1
+    assert metadata["feature_schema_version"] == 1
+    assert metadata["feature_normalization"] == "per_quartet_max"
+    assert metadata["tip_order"] == tree.get_tip_labels()
+    assert metadata["quartet_order"] == [
+        [0, 1, 2, 3],
+        [0, 1, 2, 4],
+        [0, 1, 3, 4],
+        [0, 2, 3, 4],
+        [1, 2, 3, 4],
+    ]
+    assert metadata["seeds"]["master"] == 123
+    assert metadata["configuration"]["nrows"] == 5
 
 
 def test_existing_artifacts_are_protected_and_force_recreates_all(tmp_path):
